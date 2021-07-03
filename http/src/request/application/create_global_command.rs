@@ -3,8 +3,9 @@ use crate::{
     error::Error as HttpError,
     request::{
         application::{InteractionError, InteractionErrorType},
-        validate, Pending, Request,
+        validate, Request, RequestBuilder,
     },
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use twilight_model::{
@@ -23,7 +24,6 @@ use twilight_model::{
 pub struct CreateGlobalCommand<'a> {
     command: Command,
     application_id: ApplicationId,
-    fut: Option<Pending<'a, ()>>,
     http: &'a Client,
     optional_option_added: bool,
 }
@@ -60,7 +60,6 @@ impl<'a> CreateGlobalCommand<'a> {
                 options: vec![],
             },
             application_id,
-            fut: None,
             http,
             optional_option_added: false,
         })
@@ -91,23 +90,27 @@ impl<'a> CreateGlobalCommand<'a> {
     }
 
     /// Whether the command is enabled by default when the app is added to a guild.
-    pub fn default_permission(mut self, default: bool) -> Self {
-        self.command.default_permission.replace(default);
+    pub const fn default_permission(mut self, default: bool) -> Self {
+        self.command.default_permission = Some(default);
 
         self
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
-        let request = Request::builder(Route::CreateGlobalCommand {
+    fn request(&self) -> Result<Request<'a>, HttpError> {
+        Request::builder(Route::CreateGlobalCommand {
             application_id: self.application_id.0,
         })
-        .json(&self.command)?;
+        .json(&self.command)
+        .map(RequestBuilder::build)
+    }
 
-        self.fut
-            .replace(Box::pin(self.http.verify(request.build())));
-
-        Ok(())
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
+        match self.request() {
+            Ok(request) => self.http.request(request),
+            Err(source) => ResponseFuture::error(source),
+        }
     }
 }
-
-poll_req!(CreateGlobalCommand<'_>, ());

@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, Pending, Request},
+    request::{validate, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
@@ -63,21 +63,15 @@ impl Error for CreateTemplateError {}
 #[non_exhaustive]
 pub enum CreateTemplateErrorType {
     /// Name of the template is invalid.
-    NameInvalid {
-        /// Provided name.
-        name: String,
-    },
+    NameInvalid,
     /// Description of the template is invalid.
-    DescriptionTooLarge {
-        /// Provided description.
-        description: String,
-    },
+    DescriptionTooLarge,
 }
 
 #[derive(Serialize)]
-struct CreateTemplateFields {
-    name: String,
-    description: Option<String>,
+struct CreateTemplateFields<'a> {
+    name: &'a str,
+    description: Option<&'a str>,
 }
 
 /// Create a template from the current state of the guild.
@@ -90,8 +84,7 @@ struct CreateTemplateFields {
 /// Returns a [`CreateTemplateErrorType::NameInvalid`] error type if the name is
 /// invalid.
 pub struct CreateTemplate<'a> {
-    fields: CreateTemplateFields,
-    fut: Option<Pending<'a, Template>>,
+    fields: CreateTemplateFields<'a>,
     guild_id: GuildId,
     http: &'a Client,
 }
@@ -100,19 +93,11 @@ impl<'a> CreateTemplate<'a> {
     pub(crate) fn new(
         http: &'a Client,
         guild_id: GuildId,
-        name: impl Into<String>,
+        name: &'a str,
     ) -> Result<Self, CreateTemplateError> {
-        Self::_new(http, guild_id, name.into())
-    }
-
-    fn _new(
-        http: &'a Client,
-        guild_id: GuildId,
-        name: String,
-    ) -> Result<Self, CreateTemplateError> {
-        if !validate::template_name(&name) {
+        if !validate::template_name(name) {
             return Err(CreateTemplateError {
-                kind: CreateTemplateErrorType::NameInvalid { name },
+                kind: CreateTemplateErrorType::NameInvalid,
             });
         }
 
@@ -122,7 +107,6 @@ impl<'a> CreateTemplate<'a> {
                 description: None,
             },
             guild_id,
-            fut: None,
             http,
         })
     }
@@ -135,14 +119,10 @@ impl<'a> CreateTemplate<'a> {
     ///
     /// Returns a [`CreateTemplateErrorType::DescriptionTooLarge`] error type if
     /// the description is too large.
-    pub fn description(self, description: impl Into<String>) -> Result<Self, CreateTemplateError> {
-        self._description(description.into())
-    }
-
-    fn _description(mut self, description: String) -> Result<Self, CreateTemplateError> {
-        if !validate::template_description(&description) {
+    pub fn description(mut self, description: &'a str) -> Result<Self, CreateTemplateError> {
+        if !validate::template_description(description) {
             return Err(CreateTemplateError {
-                kind: CreateTemplateErrorType::DescriptionTooLarge { description },
+                kind: CreateTemplateErrorType::DescriptionTooLarge,
             });
         }
 
@@ -151,17 +131,19 @@ impl<'a> CreateTemplate<'a> {
         Ok(self)
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
-        let request = Request::builder(Route::CreateTemplate {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Template> {
+        let mut request = Request::builder(Route::CreateTemplate {
             guild_id: self.guild_id.0,
-        })
-        .json(&self.fields)?
-        .build();
+        });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(CreateTemplate<'_>, Template);

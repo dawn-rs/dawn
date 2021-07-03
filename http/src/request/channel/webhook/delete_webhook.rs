@@ -1,29 +1,27 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{self, AuditLogReason, AuditLogReasonError, Pending, Request},
+    request::{self, AuditLogReason, AuditLogReasonError, Request},
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use twilight_model::id::WebhookId;
 
-struct DeleteWebhookParams {
-    token: Option<String>,
+struct DeleteWebhookParams<'a> {
+    token: Option<&'a str>,
 }
 
 /// Delete a webhook by its ID.
 pub struct DeleteWebhook<'a> {
-    fields: DeleteWebhookParams,
-    fut: Option<Pending<'a, ()>>,
+    fields: DeleteWebhookParams<'a>,
     http: &'a Client,
     id: WebhookId,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 impl<'a> DeleteWebhook<'a> {
-    pub(crate) fn new(http: &'a Client, id: WebhookId) -> Self {
+    pub(crate) const fn new(http: &'a Client, id: WebhookId) -> Self {
         Self {
             fields: DeleteWebhookParams { token: None },
-            fut: None,
             http,
             id,
             reason: None,
@@ -31,36 +29,38 @@ impl<'a> DeleteWebhook<'a> {
     }
 
     /// Specify the token for auth, if not already authenticated with a Bot token.
-    pub fn token(mut self, token: impl Into<String>) -> Self {
-        self.fields.token.replace(token.into());
+    pub const fn token(mut self, token: &'a str) -> Self {
+        self.fields.token = Some(token);
 
         self
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
         let mut request = Request::builder(Route::DeleteWebhook {
             webhook_id: self.id.0,
-            token: self.fields.token.clone(),
+            token: self.fields.token,
         });
 
         if let Some(reason) = self.reason.as_ref() {
-            request = request.headers(request::audit_header(reason)?);
+            let header = match request::audit_header(reason) {
+                Ok(header) => header,
+                Err(source) => return ResponseFuture::error(source),
+            };
+
+            request = request.headers(header);
         }
 
-        self.fut
-            .replace(Box::pin(self.http.verify(request.build())));
-
-        Ok(())
+        self.http.request(request.build())
     }
 }
 
-impl<'a> AuditLogReason for DeleteWebhook<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for DeleteWebhook<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }
 }
-
-poll_req!(DeleteWebhook<'_>, ());

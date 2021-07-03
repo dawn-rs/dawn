@@ -59,6 +59,13 @@ impl DayLimiter {
         let info = http
             .gateway()
             .authed()
+            .exec()
+            .await
+            .map_err(|source| DayLimiterError {
+                kind: DayLimiterErrorType::RetrievingSessionAvailability,
+                source: Some(Box::new(source)),
+            })?
+            .model()
             .await
             .map_err(|source| DayLimiterError {
                 kind: DayLimiterErrorType::RetrievingSessionAvailability,
@@ -88,23 +95,27 @@ impl DayLimiter {
         } else {
             let wait = lock.last_check + lock.next_reset;
             time::sleep_until(wait).await;
-            if let Ok(info) = lock.http.gateway().authed().await {
-                let last_check = Instant::now();
-                let next_reset = Duration::from_millis(info.session_start_limit.remaining);
-                tracing::info!("next session start limit reset in: {:.2?}", next_reset);
-                let total = info.session_start_limit.total;
-                let remaining = info.session_start_limit.remaining;
-                assert!(total >= remaining);
-                let current = total - remaining;
-                lock.last_check = last_check;
-                lock.next_reset = next_reset;
-                lock.total = total;
-                lock.current = current + 1;
-            } else {
-                tracing::warn!(
-                    "unable to get new session limits, skipping (this may cause bad things)"
-                )
+            if let Ok(res) = lock.http.gateway().authed().exec().await {
+                if let Ok(info) = res.model().await {
+                    let last_check = Instant::now();
+                    let next_reset = Duration::from_millis(info.session_start_limit.remaining);
+                    tracing::info!("next session start limit reset in: {:.2?}", next_reset);
+                    let total = info.session_start_limit.total;
+                    let remaining = info.session_start_limit.remaining;
+                    assert!(total >= remaining);
+                    let current = total - remaining;
+                    lock.last_check = last_check;
+                    lock.next_reset = next_reset;
+                    lock.total = total;
+                    lock.current = current + 1;
+
+                    return;
+                }
             }
+
+            tracing::warn!(
+                "unable to get new session limits, skipping (this may cause bad things)"
+            );
         }
     }
 }

@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, Pending, Request},
+    request::{validate, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use std::{
@@ -66,24 +66,25 @@ pub enum GetGuildPruneCountErrorType {
 }
 
 #[derive(Default)]
-struct GetGuildPruneCountFields {
+struct GetGuildPruneCountFields<'a> {
     days: Option<u64>,
-    include_roles: Vec<u64>,
+    include_roles: &'a [RoleId],
 }
 
 /// Get the counts of guild members to be pruned.
 pub struct GetGuildPruneCount<'a> {
-    fields: GetGuildPruneCountFields,
-    fut: Option<Pending<'a, GuildPrune>>,
+    fields: GetGuildPruneCountFields<'a>,
     guild_id: GuildId,
     http: &'a Client,
 }
 
 impl<'a> GetGuildPruneCount<'a> {
-    pub(crate) fn new(http: &'a Client, guild_id: GuildId) -> Self {
+    pub(crate) const fn new(http: &'a Client, guild_id: GuildId) -> Self {
         Self {
-            fields: GetGuildPruneCountFields::default(),
-            fut: None,
+            fields: GetGuildPruneCountFields {
+                days: None,
+                include_roles: &[],
+            },
             guild_id,
             http,
         }
@@ -98,41 +99,38 @@ impl<'a> GetGuildPruneCount<'a> {
     ///
     /// Returns a [`GetGuildPruneCountErrorType::DaysInvalid`] error type if the
     /// number of days is 0.
-    pub fn days(mut self, days: u64) -> Result<Self, GetGuildPruneCountError> {
+    pub const fn days(mut self, days: u64) -> Result<Self, GetGuildPruneCountError> {
         if !validate::guild_prune_days(days) {
             return Err(GetGuildPruneCountError {
                 kind: GetGuildPruneCountErrorType::DaysInvalid,
             });
         }
 
-        self.fields.days.replace(days);
+        self.fields.days = Some(days);
 
         Ok(self)
     }
 
     /// List of roles to include when calculating prune count
-    pub fn include_roles(mut self, roles: impl Iterator<Item = RoleId>) -> Self {
-        let roles = roles.map(|e| e.0).collect::<Vec<_>>();
-
+    pub const fn include_roles(mut self, roles: &'a [RoleId]) -> Self {
         self.fields.include_roles = roles;
 
         self
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<GuildPrune> {
         let request = Request::from_route(Route::GetGuildPruneCount {
             days: self.fields.days,
             guild_id: self.guild_id.0,
-            include_roles: self.fields.include_roles.clone(),
+            include_roles: self.fields.include_roles,
         });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(GetGuildPruneCount<'_>, GuildPrune);
 
 #[cfg(test)]
 mod test {
@@ -143,7 +141,7 @@ mod test {
     #[test]
     fn test_days() {
         fn days_valid(days: u64) -> bool {
-            let client = Client::new("");
+            let client = Client::new("".to_owned());
             let count = GetGuildPruneCount::new(&client, GuildId(0));
             let days_result = count.days(days);
             days_result.is_ok()

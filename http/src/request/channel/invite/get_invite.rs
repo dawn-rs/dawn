@@ -1,12 +1,6 @@
-use crate::{
-    client::Client,
-    error::Error,
-    request::{PendingOption, Request},
-    routing::Route,
-};
+use crate::{client::Client, request::Request, response::ResponseFuture, routing::Route};
 use twilight_model::invite::Invite;
 
-#[derive(Default)]
 struct GetInviteFields {
     with_counts: bool,
     with_expiration: bool,
@@ -25,11 +19,12 @@ struct GetInviteFields {
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 ///
 /// let invite = client
 ///     .invite("code")
 ///     .with_counts()
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
@@ -37,18 +32,19 @@ struct GetInviteFields {
 /// [`with_counts`]: Self::with_counts
 /// [`with_expiration`]: Self::with_expiration
 pub struct GetInvite<'a> {
-    code: String,
+    code: &'a str,
     fields: GetInviteFields,
-    fut: Option<PendingOption<'a>>,
     http: &'a Client,
 }
 
 impl<'a> GetInvite<'a> {
-    pub(crate) fn new(http: &'a Client, code: impl Into<String>) -> Self {
+    pub(crate) const fn new(http: &'a Client, code: &'a str) -> Self {
         Self {
-            code: code.into(),
-            fields: GetInviteFields::default(),
-            fut: None,
+            code,
+            fields: GetInviteFields {
+                with_counts: false,
+                with_expiration: false,
+            },
             http,
         }
     }
@@ -67,17 +63,16 @@ impl<'a> GetInvite<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Invite> {
         let request = Request::from_route(Route::GetInviteWithExpiration {
-            code: self.code.clone(),
+            code: self.code,
             with_counts: self.fields.with_counts,
             with_expiration: self.fields.with_expiration,
         });
 
-        self.fut.replace(Box::pin(self.http.request_bytes(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(opt, GetInvite<'_>, Invite);

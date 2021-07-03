@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{self, AuditLogReason, AuditLogReasonError, Pending, Request},
+    request::{self, AuditLogReason, AuditLogReasonError, Request},
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use twilight_model::id::{ChannelId, MessageId};
@@ -9,47 +9,51 @@ use twilight_model::id::{ChannelId, MessageId};
 /// Delete a message by [`ChannelId`] and [`MessageId`].
 pub struct DeleteMessage<'a> {
     channel_id: ChannelId,
-    fut: Option<Pending<'a, ()>>,
     http: &'a Client,
     message_id: MessageId,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 impl<'a> DeleteMessage<'a> {
-    pub(crate) fn new(http: &'a Client, channel_id: ChannelId, message_id: MessageId) -> Self {
+    pub(crate) const fn new(
+        http: &'a Client,
+        channel_id: ChannelId,
+        message_id: MessageId,
+    ) -> Self {
         Self {
             channel_id,
-            fut: None,
             http,
             message_id,
             reason: None,
         }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
         let mut request = Request::builder(Route::DeleteMessage {
             channel_id: self.channel_id.0,
             message_id: self.message_id.0,
         });
 
         if let Some(reason) = &self.reason {
-            request = request.headers(request::audit_header(reason)?);
+            let header = match request::audit_header(reason) {
+                Ok(header) => header,
+                Err(source) => return ResponseFuture::error(source),
+            };
+
+            request = request.headers(header);
         }
 
-        self.fut
-            .replace(Box::pin(self.http.verify(request.build())));
-
-        Ok(())
+        self.http.request(request.build())
     }
 }
 
-impl<'a> AuditLogReason for DeleteMessage<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for DeleteMessage<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }
 }
-
-poll_req!(DeleteMessage<'_>, ());

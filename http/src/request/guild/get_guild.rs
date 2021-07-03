@@ -1,12 +1,6 @@
-use crate::{
-    client::Client,
-    error::Error,
-    request::{Pending, Request},
-    routing::Route,
-};
+use crate::{client::Client, request::Request, response::ResponseFuture, routing::Route};
 use twilight_model::{guild::Guild, id::GuildId};
 
-#[derive(Default)]
 struct GetGuildFields {
     with_counts: bool,
 }
@@ -14,16 +8,14 @@ struct GetGuildFields {
 /// Get information about a guild.
 pub struct GetGuild<'a> {
     fields: GetGuildFields,
-    fut: Option<Pending<'a, Option<Guild>>>,
     guild_id: GuildId,
     http: &'a Client,
 }
 
 impl<'a> GetGuild<'a> {
-    pub(crate) fn new(http: &'a Client, guild_id: GuildId) -> Self {
+    pub(crate) const fn new(http: &'a Client, guild_id: GuildId) -> Self {
         Self {
-            fields: GetGuildFields::default(),
-            fut: None,
+            fields: GetGuildFields { with_counts: false },
             guild_id,
             http,
         }
@@ -37,16 +29,15 @@ impl<'a> GetGuild<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Guild> {
         let request = Request::from_route(Route::GetGuild {
             guild_id: self.guild_id.0,
             with_counts: self.fields.with_counts,
         });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(GetGuild<'_>, Option<Guild>);

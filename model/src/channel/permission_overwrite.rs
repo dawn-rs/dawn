@@ -42,7 +42,7 @@ pub struct PermissionOverwrite {
     pub kind: PermissionOverwriteType,
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum PermissionOverwriteType {
     Member(UserId),
     Role(RoleId),

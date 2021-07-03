@@ -1,36 +1,25 @@
-use crate::{
-    client::Client,
-    error::Error,
-    request::{PendingOption, Request},
-    routing::Route,
-};
-use twilight_model::user::User;
+use crate::{client::Client, request::Request, response::ResponseFuture, routing::Route};
+use twilight_model::{id::UserId, user::User};
 
 /// Get a user's information by id.
 pub struct GetUser<'a> {
-    fut: Option<PendingOption<'a>>,
     http: &'a Client,
-    target_user: String,
+    user_id: UserId,
 }
 
 impl<'a> GetUser<'a> {
-    pub(crate) fn new(http: &'a Client, target_user: impl Into<String>) -> Self {
-        Self {
-            fut: None,
-            http,
-            target_user: target_user.into(),
-        }
+    pub(crate) const fn new(http: &'a Client, user_id: UserId) -> Self {
+        Self { http, user_id }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<User> {
         let request = Request::from_route(Route::GetUser {
-            target_user: self.target_user.clone(),
+            user_id: self.user_id.0,
         });
 
-        self.fut.replace(Box::pin(self.http.request_bytes(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(opt, GetUser<'_>, User);

@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, Pending, Request},
+    request::{validate, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use std::{
@@ -43,7 +43,7 @@ impl GetAuditLogError {
 impl Display for GetAuditLogError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match &self.kind {
-            GetAuditLogErrorType::LimitInvalid { .. } => f.write_str("the limit is invalid"),
+            GetAuditLogErrorType::LimitInvalid => f.write_str("the limit is invalid"),
         }
     }
 }
@@ -55,13 +55,9 @@ impl Error for GetAuditLogError {}
 #[non_exhaustive]
 pub enum GetAuditLogErrorType {
     /// The limit is either 0 or more than 100.
-    LimitInvalid {
-        /// Provided maximum number of audit logs to get.
-        limit: u64,
-    },
+    LimitInvalid,
 }
 
-#[derive(Default)]
 struct GetAuditLogFields {
     action_type: Option<AuditLogEvent>,
     before: Option<u64>,
@@ -79,42 +75,46 @@ struct GetAuditLogFields {
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("token");
+/// let client = Client::new("token".to_owned());
 ///
 /// let guild_id = GuildId(101);
 /// let audit_log = client
 /// // not done
 ///     .audit_log(guild_id)
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
 pub struct GetAuditLog<'a> {
     fields: GetAuditLogFields,
-    fut: Option<Pending<'a, Option<AuditLog>>>,
     guild_id: GuildId,
     http: &'a Client,
 }
 
 impl<'a> GetAuditLog<'a> {
-    pub(crate) fn new(http: &'a Client, guild_id: GuildId) -> Self {
+    pub(crate) const fn new(http: &'a Client, guild_id: GuildId) -> Self {
         Self {
-            fields: GetAuditLogFields::default(),
-            fut: None,
+            fields: GetAuditLogFields {
+                action_type: None,
+                before: None,
+                limit: None,
+                user_id: None,
+            },
             guild_id,
             http,
         }
     }
 
     /// Filter by an action type.
-    pub fn action_type(mut self, action_type: AuditLogEvent) -> Self {
-        self.fields.action_type.replace(action_type);
+    pub const fn action_type(mut self, action_type: AuditLogEvent) -> Self {
+        self.fields.action_type = Some(action_type);
 
         self
     }
 
     /// Get audit log entries before the entry specified.
-    pub fn before(mut self, before: u64) -> Self {
-        self.fields.before.replace(before);
+    pub const fn before(mut self, before: u64) -> Self {
+        self.fields.before = Some(before);
 
         self
     }
@@ -127,14 +127,14 @@ impl<'a> GetAuditLog<'a> {
     ///
     /// Returns a [`GetAuditLogErrorType::LimitInvalid`] error type if the
     /// `limit` is 0 or greater than 100.
-    pub fn limit(mut self, limit: u64) -> Result<Self, GetAuditLogError> {
+    pub const fn limit(mut self, limit: u64) -> Result<Self, GetAuditLogError> {
         if !validate::get_audit_log_limit(limit) {
             return Err(GetAuditLogError {
-                kind: GetAuditLogErrorType::LimitInvalid { limit },
+                kind: GetAuditLogErrorType::LimitInvalid,
             });
         }
 
-        self.fields.limit.replace(limit);
+        self.fields.limit = Some(limit);
 
         Ok(self)
     }
@@ -142,13 +142,16 @@ impl<'a> GetAuditLog<'a> {
     /// Filter audit log for entries from a user.
     ///
     /// This is the user who did the auditable action, not the target of the auditable action.
-    pub fn user_id(mut self, user_id: UserId) -> Self {
-        self.fields.user_id.replace(user_id);
+    pub const fn user_id(mut self, user_id: UserId) -> Self {
+        self.fields.user_id = Some(user_id);
 
         self
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<AuditLog> {
         let request = Request::from_route(Route::GetAuditLogs {
             action_type: self.fields.action_type.map(|x| x as u64),
             before: self.fields.before,
@@ -157,10 +160,6 @@ impl<'a> GetAuditLog<'a> {
             user_id: self.fields.user_id.map(|x| x.0),
         });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(GetAuditLog<'_>, Option<AuditLog>);

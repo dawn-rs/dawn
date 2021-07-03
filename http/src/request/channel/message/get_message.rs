@@ -1,9 +1,4 @@
-use crate::{
-    client::Client,
-    error::Error,
-    request::{PendingOption, Request},
-    routing::Route,
-};
+use crate::{client::Client, request::Request, response::ResponseFuture, routing::Route};
 use twilight_model::{
     channel::Message,
     id::{ChannelId, MessageId},
@@ -12,31 +7,32 @@ use twilight_model::{
 /// Get a message by [`ChannelId`] and [`MessageId`].
 pub struct GetMessage<'a> {
     channel_id: ChannelId,
-    fut: Option<PendingOption<'a>>,
     http: &'a Client,
     message_id: MessageId,
 }
 
 impl<'a> GetMessage<'a> {
-    pub(crate) fn new(http: &'a Client, channel_id: ChannelId, message_id: MessageId) -> Self {
+    pub(crate) const fn new(
+        http: &'a Client,
+        channel_id: ChannelId,
+        message_id: MessageId,
+    ) -> Self {
         Self {
             channel_id,
-            fut: None,
             http,
             message_id,
         }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Message> {
         let request = Request::from_route(Route::GetMessage {
             channel_id: self.channel_id.0,
             message_id: self.message_id.0,
         });
 
-        self.fut.replace(Box::pin(self.http.request_bytes(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(opt, GetMessage<'_>, Message);

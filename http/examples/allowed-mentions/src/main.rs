@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     //but since we did not allow @everyone pings it will not ping everyone
     client
         .create_message(channel_id)
-        .content(format!(
+        .content(&format!(
             "<@{}> you are not allowed to ping @everyone!",
             user_id.0
         ))?
@@ -32,6 +32,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 .user_ids(vec![user_id])
                 .build(),
         )
+        .exec()
         .await?;
 
     Ok(())

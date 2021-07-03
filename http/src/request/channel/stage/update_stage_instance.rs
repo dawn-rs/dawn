@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, Pending, Request},
+    request::{validate, Request},
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use serde::Serialize;
@@ -62,18 +62,15 @@ impl Error for UpdateStageInstanceError {
 #[derive(Debug)]
 pub enum UpdateStageInstanceErrorType {
     /// Topic is not between 1 and 120 characters in length.
-    InvalidTopic {
-        /// Invalid topic.
-        topic: String,
-    },
+    InvalidTopic,
 }
 
-#[derive(Default, Serialize)]
-struct UpdateStageInstanceFields {
+#[derive(Serialize)]
+struct UpdateStageInstanceFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     privacy_level: Option<PrivacyLevel>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    topic: Option<String>,
+    topic: Option<&'a str>,
 }
 
 /// Update fields of an existing stage instance.
@@ -81,37 +78,34 @@ struct UpdateStageInstanceFields {
 /// Requires the user to be a moderator of the stage channel.
 pub struct UpdateStageInstance<'a> {
     channel_id: ChannelId,
-    fields: UpdateStageInstanceFields,
-    fut: Option<Pending<'a, ()>>,
+    fields: UpdateStageInstanceFields<'a>,
     http: &'a Client,
 }
 
 impl<'a> UpdateStageInstance<'a> {
-    pub(crate) fn new(http: &'a Client, channel_id: ChannelId) -> Self {
+    pub(crate) const fn new(http: &'a Client, channel_id: ChannelId) -> Self {
         Self {
             channel_id,
-            fields: UpdateStageInstanceFields::default(),
-            fut: None,
+            fields: UpdateStageInstanceFields {
+                privacy_level: None,
+                topic: None,
+            },
             http,
         }
     }
 
     /// Set the [`PrivacyLevel`] of the instance.
-    pub fn privacy_level(mut self, privacy_level: PrivacyLevel) -> Self {
-        self.fields.privacy_level.replace(privacy_level);
+    pub const fn privacy_level(mut self, privacy_level: PrivacyLevel) -> Self {
+        self.fields.privacy_level = Some(privacy_level);
 
         self
     }
 
     /// Set the new topic of the instance.
-    pub fn topic(self, topic: impl Into<String>) -> Result<Self, UpdateStageInstanceError> {
-        self._topic(topic.into())
-    }
-
-    fn _topic(mut self, topic: String) -> Result<Self, UpdateStageInstanceError> {
+    pub fn topic(mut self, topic: &'a str) -> Result<Self, UpdateStageInstanceError> {
         if !validate::stage_topic(&topic) {
             return Err(UpdateStageInstanceError {
-                kind: UpdateStageInstanceErrorType::InvalidTopic { topic },
+                kind: UpdateStageInstanceErrorType::InvalidTopic,
                 source: None,
             });
         }
@@ -121,17 +115,19 @@ impl<'a> UpdateStageInstance<'a> {
         Ok(self)
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
-        let request = Request::builder(Route::UpdateStageInstance {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
+        let mut request = Request::builder(Route::UpdateStageInstance {
             channel_id: self.channel_id.0,
-        })
-        .json(&self.fields)?
-        .build();
+        });
 
-        self.fut.replace(Box::pin(self.http.verify(request)));
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(UpdateStageInstance<'_>, ());

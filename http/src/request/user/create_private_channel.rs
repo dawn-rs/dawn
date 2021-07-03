@@ -1,9 +1,4 @@
-use crate::{
-    client::Client,
-    error::Error,
-    request::{Pending, Request},
-    routing::Route,
-};
+use crate::{client::Client, request::Request, response::ResponseFuture, routing::Route};
 use serde::Serialize;
 use twilight_model::{channel::PrivateChannel, id::UserId};
 
@@ -17,27 +12,24 @@ struct CreatePrivateChannelFields {
 /// This endpoint is limited to 10 active group DMs.
 pub struct CreatePrivateChannel<'a> {
     fields: CreatePrivateChannelFields,
-    fut: Option<Pending<'a, PrivateChannel>>,
     http: &'a Client,
 }
 
 impl<'a> CreatePrivateChannel<'a> {
-    pub(crate) fn new(http: &'a Client, recipient_id: UserId) -> Self {
+    pub(crate) const fn new(http: &'a Client, recipient_id: UserId) -> Self {
         Self {
             fields: CreatePrivateChannelFields { recipient_id },
-            fut: None,
             http,
         }
     }
-    fn start(&mut self) -> Result<(), Error> {
-        let request = Request::builder(Route::CreatePrivateChannel)
-            .json(&self.fields)?
-            .build();
+    pub fn exec(self) -> ResponseFuture<PrivateChannel> {
+        let request = Request::builder(Route::CreatePrivateChannel);
 
-        self.fut.replace(Box::pin(self.http.request(request)));
+        let request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(CreatePrivateChannel<'_>, PrivateChannel);

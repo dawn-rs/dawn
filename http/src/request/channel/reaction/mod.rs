@@ -1,9 +1,10 @@
 pub mod get_reactions;
 
+pub(crate) mod delete_reaction;
+
 mod create_reaction;
 mod delete_all_reaction;
 mod delete_all_reactions;
-mod delete_reaction;
 
 pub use self::{
     create_reaction::CreateReaction, delete_all_reaction::DeleteAllReaction,
@@ -12,11 +13,11 @@ pub use self::{
 };
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use twilight_model::{channel::ReactionType, id::EmojiId};
+use twilight_model::id::EmojiId;
 
 /// Handle a reaction of either a custom or unicode emoji.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum RequestReactionType {
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum RequestReactionType<'a> {
     /// Reaction of a custom emoji.
     Custom {
         /// ID of the custom emoji.
@@ -25,16 +26,16 @@ pub enum RequestReactionType {
         ///
         /// This is not strictly required, but may be helpful for Discord to
         /// work with.
-        name: Option<String>,
+        name: Option<&'a str>,
     },
     /// Reaction of a unicode emoji, such as "🌈".
     Unicode {
         /// Unicode emoji.
-        name: String,
+        name: &'a str,
     },
 }
 
-impl RequestReactionType {
+impl<'a> RequestReactionType<'a> {
     /// Create a display formatter for a reaction type resulting in a format
     /// acceptable for use in URLs.
     ///
@@ -47,7 +48,7 @@ impl RequestReactionType {
     /// use twilight_model::id::EmojiId;
     ///
     /// let reaction = RequestReactionType::Unicode {
-    ///     name: "🏳️‍⚧️".to_owned(),
+    ///     name: "🏳️‍⚧️",
     /// };
     ///
     /// // Retrieve the display formatter.
@@ -59,17 +60,8 @@ impl RequestReactionType {
     ///     display.to_string(),
     /// );
     /// ```
-    pub const fn display(&self) -> RequestReactionTypeDisplay<'_> {
+    pub const fn display(&'a self) -> RequestReactionTypeDisplay<'a> {
         RequestReactionTypeDisplay(self)
-    }
-}
-
-impl From<ReactionType> for RequestReactionType {
-    fn from(other: ReactionType) -> Self {
-        match other {
-            ReactionType::Custom { id, name, .. } => Self::Custom { id, name },
-            ReactionType::Unicode { name } => Self::Unicode { name },
-        }
     }
 }
 
@@ -85,7 +77,7 @@ impl From<ReactionType> for RequestReactionType {
 ///
 /// let reaction = RequestReactionType::Custom {
 ///     id: EmojiId(123),
-///     name: Some("rarity".to_owned()),
+///     name: Some("rarity"),
 /// };
 ///
 /// // Retrieve the display formatter.
@@ -95,7 +87,7 @@ impl From<ReactionType> for RequestReactionType {
 /// assert_eq!("rarity:123", display.to_string());
 /// ```
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct RequestReactionTypeDisplay<'a>(&'a RequestReactionType);
+pub struct RequestReactionTypeDisplay<'a>(&'a RequestReactionType<'a>);
 
 impl Display for RequestReactionTypeDisplay<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
@@ -132,13 +124,13 @@ mod tests {
     assert_fields!(RequestReactionType::Custom: id, name);
     assert_fields!(RequestReactionType::Unicode: name);
     assert_impl_all!(RequestReactionTypeDisplay<'_>: Clone, Debug, Display, Eq, PartialEq, Send, Sync);
-    assert_impl_all!(RequestReactionType: Clone, Debug, Eq, PartialEq, Send, Sync);
+    assert_impl_all!(RequestReactionType<'_>: Clone, Debug, Eq, PartialEq, Send, Sync);
 
     #[test]
     fn test_display_custom_with_name() {
         let reaction = RequestReactionType::Custom {
             id: EmojiId(123),
-            name: Some("foo".to_owned()),
+            name: Some("foo"),
         };
 
         assert_eq!("foo:123", reaction.display().to_string());
@@ -160,7 +152,7 @@ mod tests {
     fn test_display_unicode() {
         let reaction = RequestReactionType::Unicode {
             // Rainbow flag 🏳️‍🌈
-            name: "🏳️‍🌈".to_owned(),
+            name: "🏳️‍🌈",
         };
 
         assert_eq!(

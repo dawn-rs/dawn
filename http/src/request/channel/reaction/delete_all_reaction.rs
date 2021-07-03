@@ -1,8 +1,8 @@
 use super::RequestReactionType;
 use crate::{
     client::Client,
-    error::Error,
-    request::{Pending, Request},
+    request::Request,
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use twilight_model::id::{ChannelId, MessageId};
@@ -10,39 +10,36 @@ use twilight_model::id::{ChannelId, MessageId};
 /// Remove all reactions of a specified emoji from a message.
 pub struct DeleteAllReaction<'a> {
     channel_id: ChannelId,
-    emoji: RequestReactionType,
-    fut: Option<Pending<'a, ()>>,
+    emoji: &'a RequestReactionType<'a>,
     http: &'a Client,
     message_id: MessageId,
 }
 
 impl<'a> DeleteAllReaction<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         http: &'a Client,
         channel_id: ChannelId,
         message_id: MessageId,
-        emoji: RequestReactionType,
+        emoji: &'a RequestReactionType<'a>,
     ) -> Self {
         Self {
             channel_id,
             emoji,
-            fut: None,
             http,
             message_id,
         }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
         let request = Request::from_route(Route::DeleteMessageSpecificReaction {
             channel_id: self.channel_id.0,
             message_id: self.message_id.0,
-            emoji: self.emoji.display().to_string(),
+            emoji: self.emoji,
         });
 
-        self.fut.replace(Box::pin(self.http.verify(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(DeleteAllReaction<'_>, ());

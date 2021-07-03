@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, NullableField, Pending, Request},
+    request::{validate, NullableField, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
@@ -61,18 +61,15 @@ impl Error for UpdateCurrentUserError {}
 pub enum UpdateCurrentUserErrorType {
     /// The length of the username is either fewer than 2 UTF-16 characters or more than 32 UTF-16
     /// characters.
-    UsernameInvalid {
-        /// Provided username.
-        username: String,
-    },
+    UsernameInvalid,
 }
 
-#[derive(Default, Serialize)]
-struct UpdateCurrentUserFields {
+#[derive(Serialize)]
+struct UpdateCurrentUserFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
-    avatar: Option<NullableField<String>>,
+    avatar: Option<NullableField<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    username: Option<String>,
+    username: Option<&'a str>,
 }
 
 /// Update the current user.
@@ -80,16 +77,17 @@ struct UpdateCurrentUserFields {
 /// All paramaters are optional. If the username is changed, it may cause the discriminator to be
 /// rnadomized.
 pub struct UpdateCurrentUser<'a> {
-    fields: UpdateCurrentUserFields,
-    fut: Option<Pending<'a, User>>,
+    fields: UpdateCurrentUserFields<'a>,
     http: &'a Client,
 }
 
 impl<'a> UpdateCurrentUser<'a> {
-    pub(crate) fn new(http: &'a Client) -> Self {
+    pub(crate) const fn new(http: &'a Client) -> Self {
         Self {
-            fields: UpdateCurrentUserFields::default(),
-            fut: None,
+            fields: UpdateCurrentUserFields {
+                avatar: None,
+                username: None,
+            },
             http,
         }
     }
@@ -101,10 +99,8 @@ impl<'a> UpdateCurrentUser<'a> {
     /// for more information.
     ///
     /// [the discord docs]: https://discord.com/developers/docs/reference#image-data
-    pub fn avatar(mut self, avatar: impl Into<Option<String>>) -> Self {
-        self.fields
-            .avatar
-            .replace(NullableField::from_option(avatar.into()));
+    pub const fn avatar(mut self, avatar: Option<&'a str>) -> Self {
+        self.fields.avatar = Some(NullableField(avatar));
 
         self
     }
@@ -117,14 +113,10 @@ impl<'a> UpdateCurrentUser<'a> {
     ///
     /// Returns an [`UpdateCurrentUserErrorType::UsernameInvalid`] error type if
     /// the username length is too short or too long.
-    pub fn username(self, username: impl Into<String>) -> Result<Self, UpdateCurrentUserError> {
-        self._username(username.into())
-    }
-
-    fn _username(mut self, username: String) -> Result<Self, UpdateCurrentUserError> {
+    pub fn username(mut self, username: &'a str) -> Result<Self, UpdateCurrentUserError> {
         if !validate::username(&username) {
             return Err(UpdateCurrentUserError {
-                kind: UpdateCurrentUserErrorType::UsernameInvalid { username },
+                kind: UpdateCurrentUserErrorType::UsernameInvalid,
             });
         }
 
@@ -133,15 +125,17 @@ impl<'a> UpdateCurrentUser<'a> {
         Ok(self)
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
-        let request = Request::builder(Route::UpdateCurrentUser)
-            .json(&self.fields)?
-            .build();
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<User> {
+        let mut request = Request::builder(Route::UpdateCurrentUser);
 
-        self.fut.replace(Box::pin(self.http.request(request)));
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(UpdateCurrentUser<'_>, User);

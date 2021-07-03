@@ -1,16 +1,13 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, PendingOption, Request},
+    request::{validate, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
 use std::{
     error::Error,
     fmt::{Display, Formatter, Result as FmtResult},
-    future::Future,
-    pin::Pin,
-    task::{Context, Poll},
 };
 use twilight_model::{
     guild::PartialMember,
@@ -52,9 +49,7 @@ impl AddGuildMemberError {
 impl Display for AddGuildMemberError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match &self.kind {
-            AddGuildMemberErrorType::NicknameInvalid { .. } => {
-                f.write_str("nickname length is invalid")
-            }
+            AddGuildMemberErrorType::NicknameInvalid => f.write_str("nickname length is invalid"),
         }
     }
 }
@@ -66,25 +61,24 @@ impl Error for AddGuildMemberError {}
 pub enum AddGuildMemberErrorType {
     /// Nickname is either empty or the length is more than 32 UTF-16
     /// characters.
-    NicknameInvalid { nickname: String },
+    NicknameInvalid,
 }
 
 #[derive(Serialize)]
-struct AddGuildMemberFields {
-    pub access_token: String,
+struct AddGuildMemberFields<'a> {
+    pub access_token: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deaf: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mute: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub nick: Option<String>,
+    pub nick: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub roles: Option<Vec<RoleId>>,
+    pub roles: Option<&'a [RoleId]>,
 }
 
 pub struct AddGuildMember<'a> {
-    fields: AddGuildMemberFields,
-    fut: Option<PendingOption<'a>>,
+    fields: AddGuildMemberFields<'a>,
     guild_id: GuildId,
     http: &'a Client,
     user_id: UserId,
@@ -97,16 +91,12 @@ pub struct AddGuildMember<'a> {
 ///
 /// [the discord docs]: https://discord.com/developers/docs/resources/guild#add-guild-member
 impl<'a> AddGuildMember<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         http: &'a Client,
         guild_id: GuildId,
         user_id: UserId,
-        access_token: impl Into<String>,
+        access_token: &'a str,
     ) -> Self {
-        Self::_new(http, guild_id, user_id, access_token.into())
-    }
-
-    fn _new(http: &'a Client, guild_id: GuildId, user_id: UserId, access_token: String) -> Self {
         Self {
             fields: AddGuildMemberFields {
                 access_token,
@@ -115,7 +105,6 @@ impl<'a> AddGuildMember<'a> {
                 nick: None,
                 roles: None,
             },
-            fut: None,
             guild_id,
             http,
             user_id,
@@ -124,15 +113,15 @@ impl<'a> AddGuildMember<'a> {
 
     /// Whether the new member will be unable to hear audio when connected to a
     /// voice channel.
-    pub fn deaf(mut self, deaf: bool) -> Self {
-        self.fields.deaf.replace(deaf);
+    pub const fn deaf(mut self, deaf: bool) -> Self {
+        self.fields.deaf = Some(deaf);
 
         self
     }
 
     /// Whether the new member will be unable to speak in voice channels.
-    pub fn mute(mut self, mute: bool) -> Self {
-        self.fields.mute.replace(mute);
+    pub const fn mute(mut self, mute: bool) -> Self {
+        self.fields.mute = Some(mute);
 
         self
     }
@@ -146,14 +135,10 @@ impl<'a> AddGuildMember<'a> {
     ///
     /// Returns an [`AddGuildMemberErrorType::NicknameInvalid`] error type if
     /// the nickname is too short or too long.
-    pub fn nick(self, nick: impl Into<String>) -> Result<Self, AddGuildMemberError> {
-        self._nick(nick.into())
-    }
-
-    fn _nick(mut self, nick: String) -> Result<Self, AddGuildMemberError> {
+    pub fn nick(mut self, nick: &'a str) -> Result<Self, AddGuildMemberError> {
         if !validate::nickname(&nick) {
             return Err(AddGuildMemberError {
-                kind: AddGuildMemberErrorType::NicknameInvalid { nickname: nick },
+                kind: AddGuildMemberErrorType::NicknameInvalid,
             });
         }
 
@@ -163,48 +148,26 @@ impl<'a> AddGuildMember<'a> {
     }
 
     /// List of roles to assign the new member.
-    pub fn roles(mut self, roles: Vec<RoleId>) -> Self {
-        self.fields.roles.replace(roles);
+    pub const fn roles(mut self, roles: &'a [RoleId]) -> Self {
+        self.fields.roles = Some(roles);
 
         self
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
-        let request = Request::builder(Route::AddGuildMember {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<PartialMember> {
+        let mut request = Request::builder(Route::AddGuildMember {
             guild_id: self.guild_id.0,
             user_id: self.user_id.0,
-        })
-        .json(&self.fields)?
-        .build();
+        });
 
-        self.fut.replace(Box::pin(self.http.request_bytes(request)));
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
-    }
-}
-
-impl Future for AddGuildMember<'_> {
-    type Output = Result<Option<PartialMember>, HttpError>;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        loop {
-            if let Some(fut) = self.as_mut().fut.as_mut() {
-                let bytes = match fut.as_mut().poll(cx) {
-                    Poll::Ready(Ok(bytes)) => bytes,
-                    Poll::Ready(Err(why)) => return Poll::Ready(Err(why)),
-                    Poll::Pending => return Poll::Pending,
-                };
-
-                if bytes.is_empty() {
-                    return Poll::Ready(Ok(None));
-                }
-
-                return Poll::Ready(crate::json::parse_bytes(&bytes));
-            }
-
-            if let Err(why) = self.as_mut().start() {
-                return Poll::Ready(Err(why));
-            }
-        }
+        self.http.request(request.build())
     }
 }

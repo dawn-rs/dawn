@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{GetGatewayAuthed, Pending, Request},
+    request::{GetGatewayAuthed, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use twilight_model::gateway::connection_info::ConnectionInfo;
@@ -18,9 +18,9 @@ use twilight_model::gateway::connection_info::ConnectionInfo;
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 ///
-/// let info = client.gateway().await?;
+/// let info = client.gateway().exec().await?.model().await?;
 /// # Ok(()) }
 /// ```
 ///
@@ -32,39 +32,37 @@ use twilight_model::gateway::connection_info::ConnectionInfo;
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 ///
-/// let info = client.gateway().authed().await?;
+/// let info = client.gateway().authed().exec().await?.model().await?;
 ///
 /// println!("URL: {}", info.url);
 /// println!("Recommended shards to use: {}", info.shards);
 /// # Ok(()) }
 /// ```
 pub struct GetGateway<'a> {
-    fut: Option<Pending<'a, ConnectionInfo>>,
     http: &'a Client,
 }
 
 impl<'a> GetGateway<'a> {
-    pub(crate) fn new(http: &'a Client) -> Self {
-        Self { fut: None, http }
+    pub(crate) const fn new(http: &'a Client) -> Self {
+        Self { http }
     }
 
     /// Call to authenticate this request.
     ///
     /// Returns additional information: the recommended number of shards to use, and information on
     /// the current session start limit.
-    pub fn authed(self) -> GetGatewayAuthed<'a> {
+    pub const fn authed(self) -> GetGatewayAuthed<'a> {
         GetGatewayAuthed::new(self.http)
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<ConnectionInfo> {
         let request = Request::from_route(Route::GetGateway);
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(GetGateway<'_>, ConnectionInfo);

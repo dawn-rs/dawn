@@ -1,8 +1,8 @@
 use super::RequestReactionType;
 use crate::{
     client::Client,
-    error::Error,
-    request::{Pending, Request},
+    request::Request,
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use twilight_model::id::{ChannelId, MessageId};
@@ -20,59 +20,60 @@ use twilight_model::id::{ChannelId, MessageId};
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 ///
 /// let channel_id = ChannelId(123);
 /// let message_id = MessageId(456);
-/// let emoji = RequestReactionType::Unicode { name: String::from("🌃") };
+/// let emoji = RequestReactionType::Unicode { name: "🌃" };
 ///
 /// let reaction = client
-///     .create_reaction(channel_id, message_id, emoji)
+///     .create_reaction(channel_id, message_id, &emoji)
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
 pub struct CreateReaction<'a> {
     channel_id: ChannelId,
-    emoji: RequestReactionType,
-    fut: Option<Pending<'a, ()>>,
+    emoji: &'a RequestReactionType<'a>,
     http: &'a Client,
     message_id: MessageId,
 }
 
 impl<'a> CreateReaction<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         http: &'a Client,
         channel_id: ChannelId,
         message_id: MessageId,
-        emoji: RequestReactionType,
+        emoji: &'a RequestReactionType<'a>,
     ) -> Self {
         Self {
             channel_id,
             emoji,
-            fut: None,
             http,
             message_id,
         }
     }
 
-    fn request(&self) -> Request {
-        Request::from_route(Route::CreateReaction {
-            channel_id: self.channel_id.0,
-            emoji: self.emoji.display().to_string(),
-            message_id: self.message_id.0,
-        })
+    const fn request(self) -> (Request<'a>, &'a Client) {
+        (
+            Request::from_route(Route::CreateReaction {
+                channel_id: self.channel_id.0,
+                emoji: self.emoji,
+                message_id: self.message_id.0,
+            }),
+            self.http,
+        )
     }
 
-    fn start(&mut self) -> Result<(), Error> {
-        let request = self.request();
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
+        let (request, client) = self.request();
 
-        self.fut.replace(Box::pin(self.http.verify(request)));
-
-        Ok(())
+        client.request(request)
     }
 }
-
-poll_req!(CreateReaction<'_>, ());
 
 #[cfg(test)]
 mod tests {
@@ -82,26 +83,23 @@ mod tests {
         routing::Route,
         Client,
     };
-    use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
     use twilight_model::id::{ChannelId, MessageId};
 
     #[test]
     fn test_request() {
-        let client = Client::new("foo");
+        let client = Client::new("foo".to_owned());
 
-        let emoji = RequestReactionType::Unicode {
-            name: String::from("\u{1f303}"),
-        };
+        let emoji = RequestReactionType::Unicode { name: "\u{1f303}" };
 
-        let builder = CreateReaction::new(&client, ChannelId(123), MessageId(456), emoji);
-        let actual = builder.request();
+        let builder = CreateReaction::new(&client, ChannelId(123), MessageId(456), &emoji);
+        let (actual, _) = builder.request();
 
         let expected = Request::from_route(Route::CreateReaction {
             channel_id: 123,
-            emoji: utf8_percent_encode("\u{1f303}", NON_ALPHANUMERIC).to_string(),
+            emoji: &RequestReactionType::Unicode { name: "\u{1f303}" },
             message_id: 456,
         });
 
-        assert_eq!(actual.path_str, expected.path_str);
+        assert_eq!(actual.route, expected.route);
     }
 }

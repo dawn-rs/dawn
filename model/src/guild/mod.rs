@@ -22,6 +22,7 @@ mod role;
 mod role_tags;
 mod system_channel_flags;
 mod unavailable_guild;
+mod vanity_url;
 mod verification_level;
 mod widget;
 
@@ -33,8 +34,8 @@ pub use self::{
     nsfw_level::NSFWLevel, partial_guild::PartialGuild, partial_member::PartialMember,
     permissions::Permissions, premium_tier::PremiumTier, preview::GuildPreview, prune::GuildPrune,
     role::Role, role_tags::RoleTags, system_channel_flags::SystemChannelFlags,
-    unavailable_guild::UnavailableGuild, verification_level::VerificationLevel,
-    widget::GuildWidget,
+    unavailable_guild::UnavailableGuild, vanity_url::VanityUrl,
+    verification_level::VerificationLevel, widget::GuildWidget,
 };
 
 use self::member::MemberListDeserializer;

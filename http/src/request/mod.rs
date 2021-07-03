@@ -1,60 +1,3 @@
-macro_rules! poll_req {
-    ($ty: ty, $ret: ty) => {
-        impl std::future::Future for $ty {
-            type Output = ::std::result::Result<$ret, $crate::error::Error>;
-
-            fn poll(
-                mut self: std::pin::Pin<&mut Self>,
-                cx: &mut std::task::Context<'_>,
-            ) -> ::std::task::Poll<Self::Output> {
-                loop {
-                    if let Some(fut) = self.as_mut().fut.as_mut() {
-                        return fut.as_mut().poll(cx);
-                    }
-
-                    if let Err(why) = self.as_mut().start() {
-                        return std::task::Poll::Ready(Err(why));
-                    }
-                }
-            }
-        }
-    };
-
-    (opt, $ty: ty, $ret: ty) => {
-        impl std::future::Future for $ty {
-            type Output = ::std::result::Result<Option<$ret>, $crate::error::Error>;
-
-            fn poll(
-                mut self: std::pin::Pin<&mut Self>,
-                cx: &mut std::task::Context<'_>,
-            ) -> ::std::task::Poll<Self::Output> {
-                use std::task::Poll;
-
-                loop {
-                    if let Some(fut) = self.as_mut().fut.as_mut() {
-                        let bytes = match fut.as_mut().poll(cx) {
-                            Poll::Ready(Ok(bytes)) => bytes,
-                            Poll::Ready(Err(e))
-                                if matches!(e.kind, crate::error::ErrorType::Response { status, .. } if status == hyper::StatusCode::NOT_FOUND) =>
-                            {
-                                return Poll::Ready(Ok(None));
-                            }
-                            Poll::Ready(Err(why)) => return Poll::Ready(Err(why)),
-                            Poll::Pending => return Poll::Pending,
-                        };
-
-                        return Poll::Ready(crate::json::parse_bytes(&bytes));
-                    }
-
-                    if let Err(why) = self.as_mut().start() {
-                        return Poll::Ready(Err(why));
-                    }
-                }
-            }
-        }
-    };
-}
-
 pub mod application;
 pub mod channel;
 pub mod guild;
@@ -82,17 +25,13 @@ pub use self::{
 };
 
 use crate::error::{Error, ErrorType};
-use hyper::body::Bytes;
 use hyper::{
     header::{HeaderName, HeaderValue},
     Method as HyperMethod,
 };
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use serde::{Serialize, Serializer};
-use std::{future::Future, iter, pin::Pin};
-
-type Pending<'a, T> = Pin<Box<dyn Future<Output = Result<T, Error>> + Send + 'a>>;
-type PendingOption<'a> = Pin<Box<dyn Future<Output = Result<Bytes, Error>> + Send + 'a>>;
+use std::iter;
 
 /// Request method.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -127,31 +66,16 @@ impl Method {
 /// This is particularly useful when combined with an `Option` by allowing three
 /// states via `Option<NullableField<T>>`: undefined, null, and T.
 ///
-/// When undefined a field can skip serialization, while if it's null then it will
-/// serialize as null. This mechanism is primarily used in patch requests.
-enum NullableField<T> {
-    /// Remove a value.
-    Null,
-    /// Set a value.
-    Value(T),
-}
-
-impl<T> NullableField<T> {
-    /// Create a `NullableField` from an option.
-    #[allow(clippy::missing_const_for_fn)]
-    fn from_option(option: Option<T>) -> Self {
-        match option {
-            Some(value) => Self::Value(value),
-            None => Self::Null,
-        }
-    }
-}
+/// When the request field is `None` a field can skip serialization, while if a
+/// `NullableField` is provided with `None` within it then it will serialize as
+/// null. This mechanism is primarily used in patch requests.
+struct NullableField<T>(Option<T>);
 
 impl<T: Serialize> Serialize for NullableField<T> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        match self {
-            Self::Null => serializer.serialize_none(),
-            Self::Value(inner) => serializer.serialize_some(inner),
+        match self.0.as_ref() {
+            Some(inner) => serializer.serialize_some(inner),
+            None => serializer.serialize_none(),
         }
     }
 }
@@ -169,6 +93,10 @@ pub(crate) fn audit_header(
     })?;
 
     Ok(iter::once((header_name, header_value)))
+}
+
+const fn slice_is_empty<T>(slice: &[T]) -> bool {
+    slice.is_empty()
 }
 
 #[cfg(test)]

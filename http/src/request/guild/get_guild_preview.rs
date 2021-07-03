@@ -1,38 +1,27 @@
-use crate::{
-    client::Client,
-    error::Error,
-    request::{Pending, Request},
-    routing::Route,
-};
+use crate::{client::Client, request::Request, response::ResponseFuture, routing::Route};
 use twilight_model::{guild::GuildPreview, id::GuildId};
 
 /// For public guilds, get the guild preview.
 ///
 /// This works even if the user is not in the guild.
 pub struct GetGuildPreview<'a> {
-    fut: Option<Pending<'a, GuildPreview>>,
     guild_id: GuildId,
     http: &'a Client,
 }
 
 impl<'a> GetGuildPreview<'a> {
-    pub(crate) fn new(http: &'a Client, guild_id: GuildId) -> Self {
-        Self {
-            fut: None,
-            guild_id,
-            http,
-        }
+    pub(crate) const fn new(http: &'a Client, guild_id: GuildId) -> Self {
+        Self { guild_id, http }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<GuildPreview> {
         let request = Request::from_route(Route::GetGuildPreview {
             guild_id: self.guild_id.0,
         });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(GetGuildPreview<'_>, GuildPreview);

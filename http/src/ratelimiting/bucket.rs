@@ -4,7 +4,7 @@ use std::{
     collections::HashMap,
     sync::{
         atomic::{AtomicU64, Ordering},
-        Arc,
+        Arc, Mutex,
     },
     time::{Duration, Instant},
 };
@@ -12,7 +12,7 @@ use tokio::{
     sync::{
         mpsc::{self, UnboundedReceiver, UnboundedSender},
         oneshot::{self, Sender},
-        Mutex,
+        Mutex as AsyncMutex,
     },
     time::{sleep, timeout},
 };
@@ -58,9 +58,9 @@ impl Bucket {
         self.reset_after.load(Ordering::Relaxed)
     }
 
-    pub async fn time_remaining(&self) -> TimeRemaining {
+    pub fn time_remaining(&self) -> TimeRemaining {
         let reset_after = self.reset_after();
-        let started_at = match *self.started_at.lock().await {
+        let started_at = match *self.started_at.lock().expect("bucket poisoned") {
             Some(v) => v,
             None => return TimeRemaining::NotStarted,
         };
@@ -73,14 +73,14 @@ impl Bucket {
         TimeRemaining::Some(Duration::from_millis(reset_after) - elapsed)
     }
 
-    pub async fn try_reset(&self) -> bool {
-        if self.started_at.lock().await.is_none() {
+    pub fn try_reset(&self) -> bool {
+        if self.started_at.lock().expect("bucket poisoned").is_none() {
             return false;
         }
 
-        if let TimeRemaining::Finished = self.time_remaining().await {
+        if let TimeRemaining::Finished = self.time_remaining() {
             self.remaining.store(self.limit(), Ordering::Relaxed);
-            *self.started_at.lock().await = None;
+            *self.started_at.lock().expect("bucket poisoned") = None;
 
             true
         } else {
@@ -88,11 +88,11 @@ impl Bucket {
         }
     }
 
-    pub async fn update(&self, ratelimits: Option<(u64, u64, u64)>) {
+    pub fn update(&self, ratelimits: Option<(u64, u64, u64)>) {
         let bucket_limit = self.limit();
 
         {
-            let mut started_at = self.started_at.lock().await;
+            let mut started_at = self.started_at.lock().expect("bucket poisoned");
 
             if started_at.is_none() {
                 started_at.replace(Instant::now());
@@ -114,7 +114,7 @@ impl Bucket {
 
 #[derive(Debug)]
 pub struct BucketQueue {
-    rx: Mutex<UnboundedReceiver<Sender<Sender<Option<RatelimitHeaders>>>>>,
+    rx: AsyncMutex<UnboundedReceiver<Sender<Sender<Option<RatelimitHeaders>>>>>,
     tx: UnboundedSender<Sender<Sender<Option<RatelimitHeaders>>>>,
 }
 
@@ -141,7 +141,7 @@ impl Default for BucketQueue {
         let (tx, rx) = mpsc::unbounded_channel();
 
         Self {
-            rx: Mutex::new(rx),
+            rx: AsyncMutex::new(rx),
             tx,
         }
     }
@@ -204,7 +204,10 @@ impl BucketQueueTask {
         #[cfg(feature = "tracing")]
         tracing::debug!(parent: &span, "bucket appears finished, removing");
 
-        self.buckets.lock().await.remove(&self.path);
+        self.buckets
+            .lock()
+            .expect("ratelimit buckets poisoned")
+            .remove(&self.path);
     }
 
     async fn handle_headers(&self, headers: &RatelimitHeaders) {
@@ -232,7 +235,7 @@ impl BucketQueueTask {
 
         #[cfg(feature = "tracing")]
         tracing::debug!(path=?self.path, "updating bucket");
-        self.bucket.update(ratelimits).await;
+        self.bucket.update(ratelimits);
     }
 
     async fn lock_global(&self, wait: Duration) {
@@ -267,9 +270,9 @@ impl BucketQueueTask {
             #[cfg(feature = "tracing")]
             tracing::debug!(parent: &span, "0 tickets remaining, may have to wait");
 
-            match self.bucket.time_remaining().await {
+            match self.bucket.time_remaining() {
                 TimeRemaining::Finished => {
-                    self.bucket.try_reset().await;
+                    self.bucket.try_reset();
 
                     return;
                 }
@@ -290,6 +293,6 @@ impl BucketQueueTask {
         #[cfg(feature = "tracing")]
         tracing::debug!(parent: &span, "done waiting for ratelimit to pass");
 
-        self.bucket.try_reset().await;
+        self.bucket.try_reset();
     }
 }

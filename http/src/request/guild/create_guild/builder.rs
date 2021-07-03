@@ -83,13 +83,13 @@ impl RoleFieldsBuilder {
     const ROLE_ID: RoleId = RoleId(1);
 
     /// Create a new default role field builder.
-    pub fn new(name: impl Into<String>) -> Self {
+    pub const fn new(name: String) -> Self {
         Self(RoleFields {
             color: None,
             hoist: None,
             id: Self::ROLE_ID,
             mentionable: None,
-            name: name.into(),
+            name,
             permissions: None,
             position: None,
         })
@@ -122,8 +122,8 @@ impl RoleFieldsBuilder {
     }
 
     /// Show the role above other roles in the user list.
-    pub fn hoist(mut self) -> Self {
-        self.0.hoist.replace(true);
+    pub const fn hoist(mut self) -> Self {
+        self.0.hoist = Some(true);
 
         self
     }
@@ -147,22 +147,22 @@ impl RoleFieldsBuilder {
     }
 
     /// Allow the role to be @mentioned.
-    pub fn mentionable(mut self) -> Self {
-        self.0.mentionable.replace(true);
+    pub const fn mentionable(mut self) -> Self {
+        self.0.mentionable = Some(true);
 
         self
     }
 
     /// Set the permissions of the role.
-    pub fn permissions(mut self, permissions: Permissions) -> Self {
-        self.0.permissions.replace(permissions);
+    pub const fn permissions(mut self, permissions: Permissions) -> Self {
+        self.0.permissions = Some(permissions);
 
         self
     }
 
     /// Set the position of the role.
-    pub fn position(mut self, position: i64) -> Self {
-        self.0.position.replace(position);
+    pub const fn position(mut self, position: i64) -> Self {
+        self.0.position = Some(position);
 
         self
     }
@@ -294,11 +294,7 @@ impl TextFieldsBuilder {
     ///
     /// Returns a [`TextFieldsErrorType::NameTooLong`] error type if the name is
     /// too long.
-    pub fn new(name: impl Into<String>) -> Result<Self, TextFieldsError> {
-        Self::_new(name.into())
-    }
-
-    fn _new(name: String) -> Result<Self, TextFieldsError> {
+    pub fn new(name: String) -> Result<Self, TextFieldsError> {
         if name.len() < Self::MIN_NAME_LENGTH {
             return Err(TextFieldsError {
                 kind: TextFieldsErrorType::NameTooShort { name },
@@ -330,15 +326,16 @@ impl TextFieldsBuilder {
     }
 
     /// Make the channel NSFW.
-    pub fn nsfw(mut self) -> Self {
-        self.0.nsfw.replace(true);
+    pub const fn nsfw(mut self) -> Self {
+        self.0.nsfw = Some(true);
 
         self
     }
 
     /// Set the channel's permission overwrites.
+    #[allow(clippy::missing_const_for_fn)]
     pub fn permission_overwrites(mut self, overwrites: Vec<PermissionOverwrite>) -> Self {
-        self.0.permission_overwrites.replace(overwrites);
+        self.0.permission_overwrites = Some(overwrites);
 
         self
     }
@@ -349,6 +346,7 @@ impl TextFieldsBuilder {
     ///
     /// Returns a [`TextFieldsErrorType::RateLimitInvalid`] error type if the
     /// rate limit is invalid.
+    #[allow(clippy::missing_const_for_fn)]
     pub fn rate_limit_per_user(mut self, limit: u64) -> Result<Self, TextFieldsError> {
         if limit > Self::MAX_RATE_LIMIT {
             return Err(TextFieldsError {
@@ -356,7 +354,7 @@ impl TextFieldsBuilder {
             });
         }
 
-        self.0.rate_limit_per_user.replace(limit);
+        self.0.rate_limit_per_user = Some(limit);
 
         Ok(self)
     }
@@ -367,11 +365,7 @@ impl TextFieldsBuilder {
     ///
     /// Returns a [`TextFieldsErrorType::TopicTooLong`] error type if the topic
     /// is too long.
-    pub fn topic(self, topic: impl Into<String>) -> Result<Self, TextFieldsError> {
-        self._topic(topic.into())
-    }
-
-    fn _topic(mut self, topic: String) -> Result<Self, TextFieldsError> {
+    pub fn topic(mut self, topic: String) -> Result<Self, TextFieldsError> {
         if topic.len() > Self::MAX_TOPIC_LENGTH {
             return Err(TextFieldsError {
                 kind: TextFieldsErrorType::TopicTooLong { topic },
@@ -475,11 +469,7 @@ impl VoiceFieldsBuilder {
     ///
     /// Returns a [`VoiceFieldsErrorType::NameTooLong`] error type if the name
     /// is too long.
-    pub fn new(name: impl Into<String>) -> Result<Self, VoiceFieldsError> {
-        Self::_new(name.into())
-    }
-
-    fn _new(name: String) -> Result<Self, VoiceFieldsError> {
+    pub fn new(name: String) -> Result<Self, VoiceFieldsError> {
         if name.len() < Self::MIN_NAME_LENGTH {
             return Err(VoiceFieldsError {
                 kind: VoiceFieldsErrorType::NameTooShort { name },
@@ -510,8 +500,8 @@ impl VoiceFieldsBuilder {
     }
 
     /// Set the voice channel's bitrate.
-    pub fn bitrate(mut self, bitrate: u64) -> Self {
-        self.0.bitrate.replace(bitrate);
+    pub const fn bitrate(mut self, bitrate: u64) -> Self {
+        self.0.bitrate = Some(bitrate);
 
         self
     }
@@ -524,8 +514,8 @@ impl VoiceFieldsBuilder {
     }
 
     /// Set the voice channel's user limit.
-    pub fn user_limit(mut self, limit: u64) -> Self {
-        self.0.user_limit.replace(limit);
+    pub const fn user_limit(mut self, limit: u64) -> Self {
+        self.0.user_limit = Some(limit);
 
         self
     }
@@ -630,11 +620,7 @@ impl CategoryFieldsBuilder {
     ///
     /// Returns a [`CategoryFieldsErrorType::NameTooLong`] error type if the
     /// name is too long.
-    pub fn new(name: impl Into<String>) -> Result<Self, CategoryFieldsError> {
-        Self::_new(name.into())
-    }
-
-    fn _new(name: String) -> Result<Self, CategoryFieldsError> {
+    pub fn new(name: String) -> Result<Self, CategoryFieldsError> {
         if name.len() < Self::MIN_NAME_LENGTH {
             return Err(CategoryFieldsError {
                 kind: CategoryFieldsErrorType::NameTooShort { name },
@@ -676,16 +662,15 @@ impl CategoryFieldsBuilder {
     }
 
     /// Add a child text channel.
-    pub fn add_text(mut self, channel: impl Into<TextFields>) -> Self {
-        self.channels.push(GuildChannelFields::Text(channel.into()));
+    pub fn add_text(mut self, channel: TextFields) -> Self {
+        self.channels.push(GuildChannelFields::Text(channel));
 
         self
     }
 
     /// add a child voice channel.
-    pub fn add_voice(mut self, channel: impl Into<VoiceFields>) -> Self {
-        self.channels
-            .push(GuildChannelFields::Voice(channel.into()));
+    pub fn add_voice(mut self, channel: VoiceFields) -> Self {
+        self.channels.push(GuildChannelFields::Voice(channel));
 
         self
     }
@@ -709,15 +694,15 @@ impl GuildChannelFieldsBuilder {
     }
 
     /// Add a text channel to the builder.
-    pub fn add_text(mut self, channel: impl Into<TextFields>) -> Self {
-        self.0.push(GuildChannelFields::Text(channel.into()));
+    pub fn add_text(mut self, channel: TextFields) -> Self {
+        self.0.push(GuildChannelFields::Text(channel));
 
         self
     }
 
     /// Add a voice channel to the builder.
-    pub fn add_voice(mut self, channel: impl Into<VoiceFields>) -> Self {
-        self.0.push(GuildChannelFields::Voice(channel.into()));
+    pub fn add_voice(mut self, channel: VoiceFields) -> Self {
+        self.0.push(GuildChannelFields::Voice(channel));
 
         self
     }
@@ -729,7 +714,7 @@ impl GuildChannelFieldsBuilder {
             .iter()
             .rev()
             .find(|c| matches!(c, GuildChannelFields::Category(_)))
-            .map_or(ChannelId(1), |c| c.clone().id());
+            .map_or(ChannelId(1), GuildChannelFields::id);
 
         let mut channels = channel.build(ChannelId(last_id.0 + 1));
 
@@ -768,25 +753,26 @@ mod tests {
         }
     }
 
-    fn voice() -> VoiceFieldsBuilder {
-        VoiceFieldsBuilder::new("voicename")
+    fn voice() -> VoiceFields {
+        VoiceFieldsBuilder::new("voicename".to_owned())
             .unwrap()
             .bitrate(96_000)
             .permission_overwrites(vec![overwrite()])
             .user_limit(40)
+            .build()
     }
 
     #[test]
     fn test_role_fields() {
         assert!(matches!(
-            RoleFieldsBuilder::new("role")
+            RoleFieldsBuilder::new("role".to_owned())
                 .color(123_123_123)
                 .unwrap_err()
                 .kind(),
             RoleFieldsErrorType::ColorNotRgb { color: 123_123_123 },
         ));
 
-        let fields = RoleFieldsBuilder::new("rolename")
+        let fields = RoleFieldsBuilder::new("rolename".to_owned())
             .color(0x12_34_56)
             .unwrap()
             .hoist()
@@ -813,15 +799,13 @@ mod tests {
     #[test]
     fn test_voice_fields() {
         assert!(matches!(
-            VoiceFieldsBuilder::new("c").unwrap_err().kind(),
+            VoiceFieldsBuilder::new("c".to_owned()).unwrap_err().kind(),
             VoiceFieldsErrorType::NameTooShort { name }
             if name == "c"
         ));
 
-        let fields = voice();
-
         assert_eq!(
-            fields.build(),
+            voice(),
             VoiceFields {
                 bitrate: Some(96_000),
                 id: ChannelId(1),
@@ -838,29 +822,28 @@ mod tests {
         );
     }
 
-    fn text() -> TextFieldsBuilder {
-        TextFieldsBuilder::new("textname")
+    fn text() -> TextFields {
+        TextFieldsBuilder::new("textname".to_owned())
             .unwrap()
             .nsfw()
             .permission_overwrites(vec![overwrite()])
             .rate_limit_per_user(4_000)
             .unwrap()
-            .topic("a topic")
+            .topic("a topic".to_owned())
             .unwrap()
+            .build()
     }
 
     #[test]
     fn test_text_fields() {
         assert!(matches!(
-            TextFieldsBuilder::new("b").unwrap_err().kind(),
+            TextFieldsBuilder::new("b".to_owned()).unwrap_err().kind(),
             TextFieldsErrorType::NameTooShort { name }
             if name == "b"
         ));
 
-        let fields = text();
-
         assert_eq!(
-            fields.build(),
+            text(),
             TextFields {
                 id: ChannelId(1),
                 kind: ChannelType::GuildText,
@@ -879,7 +862,7 @@ mod tests {
     }
 
     fn category() -> CategoryFieldsBuilder {
-        CategoryFieldsBuilder::new("category")
+        CategoryFieldsBuilder::new("category".to_owned())
             .unwrap()
             .add_text(text())
             .add_voice(voice())
@@ -888,7 +871,7 @@ mod tests {
     #[test]
     fn test_category_fields() {
         assert!(matches!(
-            CategoryFieldsBuilder::new("a").unwrap_err().kind(),
+            CategoryFieldsBuilder::new("a".to_owned()).unwrap_err().kind(),
             CategoryFieldsErrorType::NameTooShort { name }
             if name == "a"
         ));

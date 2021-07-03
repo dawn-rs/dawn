@@ -29,9 +29,14 @@ pub struct Member {
     pub user: User,
 }
 
+/// Version of [`Member`] but without a guild ID, useful in some contexts.
+///
+/// The HTTP and Gateway APIs don't include guild IDs in their payloads, so this
+/// can be useful when you're unable to use a deserialization seed like
+/// [`MemberDeserializer`].
 // Used in the guild deserializer.
-#[derive(Deserialize, Serialize)]
-pub(crate) struct MemberIntermediary {
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub struct MemberIntermediary {
     pub deaf: bool,
     pub hoisted_role: Option<RoleId>,
     pub joined_at: Option<String>,
@@ -39,6 +44,7 @@ pub(crate) struct MemberIntermediary {
     pub nick: Option<String>,
     #[serde(default)]
     pub pending: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub premium_since: Option<String>,
     pub roles: Vec<RoleId>,
     pub user: User,

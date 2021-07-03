@@ -1,38 +1,36 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{NullableField, Pending, Request},
+    request::{NullableField, Request},
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use serde::Serialize;
 use twilight_model::id::{ChannelId, GuildId};
 
 #[derive(Serialize)]
-struct UpdateCurrentUserVoiceStateFields {
+struct UpdateCurrentUserVoiceStateFields<'a> {
     channel_id: ChannelId,
     #[serde(skip_serializing_if = "Option::is_none")]
     suppress: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    request_to_speak_timestamp: Option<NullableField<String>>,
+    request_to_speak_timestamp: Option<NullableField<&'a str>>,
 }
 
 /// Update the current user's voice state.
 pub struct UpdateCurrentUserVoiceState<'a> {
-    fields: UpdateCurrentUserVoiceStateFields,
-    fut: Option<Pending<'a, ()>>,
+    fields: UpdateCurrentUserVoiceStateFields<'a>,
     guild_id: GuildId,
     http: &'a Client,
 }
 
 impl<'a> UpdateCurrentUserVoiceState<'a> {
-    pub(crate) fn new(http: &'a Client, guild_id: GuildId, channel_id: ChannelId) -> Self {
+    pub(crate) const fn new(http: &'a Client, guild_id: GuildId, channel_id: ChannelId) -> Self {
         Self {
             fields: UpdateCurrentUserVoiceStateFields {
                 channel_id,
                 suppress: None,
                 request_to_speak_timestamp: None,
             },
-            fut: None,
             guild_id,
             http,
         }
@@ -46,19 +44,12 @@ impl<'a> UpdateCurrentUserVoiceState<'a> {
     ///
     /// - You are able to set `request_to_speak_timestamp` to any present or
     /// future time.
-    pub fn request_to_speak_timestamp(self, request_to_speak_timestamp: impl Into<String>) -> Self {
-        self._request_to_speak_timestamp(request_to_speak_timestamp.into())
-    }
-
-    fn _request_to_speak_timestamp(mut self, request_to_speak_timestamp: String) -> Self {
+    pub const fn request_to_speak_timestamp(mut self, request_to_speak_timestamp: &'a str) -> Self {
         if request_to_speak_timestamp.is_empty() {
-            self.fields
-                .request_to_speak_timestamp
-                .replace(NullableField::Null);
+            self.fields.request_to_speak_timestamp = Some(NullableField(None));
         } else {
-            self.fields
-                .request_to_speak_timestamp
-                .replace(NullableField::Value(request_to_speak_timestamp));
+            self.fields.request_to_speak_timestamp =
+                Some(NullableField(Some(request_to_speak_timestamp)));
         }
 
         self
@@ -70,23 +61,25 @@ impl<'a> UpdateCurrentUserVoiceState<'a> {
     ///
     /// - You must have the `MUTE_MEMBERS` permission to unsuppress yourself.
     /// You can always suppress yourself.
-    pub fn suppress(mut self) -> Self {
-        self.fields.suppress.replace(true);
+    pub const fn suppress(mut self) -> Self {
+        self.fields.suppress = Some(true);
 
         self
     }
 
-    fn start(&mut self) -> Result<(), Error> {
-        let request = Request::builder(Route::UpdateCurrentUserVoiceState {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
+        let mut request = Request::builder(Route::UpdateCurrentUserVoiceState {
             guild_id: self.guild_id.0,
-        })
-        .json(&self.fields)?
-        .build();
+        });
 
-        self.fut.replace(Box::pin(self.http.verify(request)));
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(UpdateCurrentUserVoiceState<'_>, ());

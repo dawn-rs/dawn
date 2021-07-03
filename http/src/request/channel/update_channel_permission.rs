@@ -19,7 +19,7 @@ use twilight_model::{
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 ///
 /// let channel_id = ChannelId(123);
 /// let allow = Permissions::VIEW_CHANNEL;
@@ -28,6 +28,7 @@ use twilight_model::{
 ///
 /// client.update_channel_permission(channel_id, allow, deny)
 ///     .role(role_id)
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
@@ -54,16 +55,19 @@ impl<'a> UpdateChannelPermission<'a> {
     }
 
     /// Specify this override to be for a member.
-    pub fn member(self, user_id: impl Into<UserId>) -> UpdateChannelPermissionConfigured<'a> {
-        self.configure(&PermissionOverwriteType::Member(user_id.into()))
+    pub const fn member(self, user_id: UserId) -> UpdateChannelPermissionConfigured<'a> {
+        self.configure(PermissionOverwriteType::Member(user_id))
     }
 
     /// Specify this override to be for a role.
-    pub fn role(self, role_id: impl Into<RoleId>) -> UpdateChannelPermissionConfigured<'a> {
-        self.configure(&PermissionOverwriteType::Role(role_id.into()))
+    pub const fn role(self, role_id: RoleId) -> UpdateChannelPermissionConfigured<'a> {
+        self.configure(PermissionOverwriteType::Role(role_id))
     }
 
-    fn configure(self, target: &PermissionOverwriteType) -> UpdateChannelPermissionConfigured<'a> {
+    const fn configure(
+        self,
+        target: PermissionOverwriteType,
+    ) -> UpdateChannelPermissionConfigured<'a> {
         UpdateChannelPermissionConfigured::new(
             self.http,
             self.channel_id,

@@ -451,6 +451,13 @@ impl Shard {
                 .http_client()
                 .gateway()
                 .authed()
+                .exec()
+                .await
+                .map_err(|source| ShardStartError {
+                    source: Some(Box::new(source)),
+                    kind: ShardStartErrorType::RetrievingGatewayUrl,
+                })?
+                .model()
                 .await
                 .map_err(|source| ShardStartError {
                     source: Some(Box::new(source)),

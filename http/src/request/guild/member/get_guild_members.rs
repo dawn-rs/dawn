@@ -1,27 +1,14 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, Pending, Request},
+    request::{validate, Request},
+    response::{marker::MemberListBody, ResponseFuture},
     routing::Route,
 };
-use hyper::body::Bytes;
-use serde::de::DeserializeSeed;
 use std::{
     error::Error,
     fmt::{Display, Formatter, Result as FmtResult},
-    future::Future,
-    pin::Pin,
-    task::{Context, Poll},
 };
-use twilight_model::{
-    guild::member::{Member, MemberDeserializer},
-    id::{GuildId, UserId},
-};
-
-#[cfg(not(feature = "simd-json"))]
-use serde_json::Value;
-#[cfg(feature = "simd-json")]
-use simd_json::value::OwnedValue as Value;
+use twilight_model::id::{GuildId, UserId};
 
 /// The error created when the members can not be fetched as configured.
 #[derive(Debug)]
@@ -76,7 +63,6 @@ pub enum GetGuildMembersErrorType {
     },
 }
 
-#[derive(Default)]
 struct GetGuildMembersFields {
     after: Option<UserId>,
     limit: Option<u64>,
@@ -98,33 +84,35 @@ struct GetGuildMembersFields {
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 ///
 /// let guild_id = GuildId(100);
 /// let user_id = UserId(3000);
-/// let members = client.guild_members(guild_id).after(user_id).await?;
+/// let members = client.guild_members(guild_id).after(user_id).exec().await?;
 /// # Ok(()) }
 /// ```
 pub struct GetGuildMembers<'a> {
     fields: GetGuildMembersFields,
-    fut: Option<Pending<'a, Bytes>>,
     guild_id: GuildId,
     http: &'a Client,
 }
 
 impl<'a> GetGuildMembers<'a> {
-    pub(crate) fn new(http: &'a Client, guild_id: GuildId) -> Self {
+    pub(crate) const fn new(http: &'a Client, guild_id: GuildId) -> Self {
         Self {
-            fields: GetGuildMembersFields::default(),
-            fut: None,
+            fields: GetGuildMembersFields {
+                after: None,
+                limit: None,
+                presences: None,
+            },
             guild_id,
             http,
         }
     }
 
     /// Sets the user ID to get members after.
-    pub fn after(mut self, after: UserId) -> Self {
-        self.fields.after.replace(after);
+    pub const fn after(mut self, after: UserId) -> Self {
+        self.fields.after = Some(after);
 
         self
     }
@@ -137,26 +125,29 @@ impl<'a> GetGuildMembers<'a> {
     ///
     /// Returns a [`GetGuildMembersErrorType::LimitInvalid`] error type if the
     /// limit is 0 or greater than 1000.
-    pub fn limit(mut self, limit: u64) -> Result<Self, GetGuildMembersError> {
+    pub const fn limit(mut self, limit: u64) -> Result<Self, GetGuildMembersError> {
         if !validate::get_guild_members_limit(limit) {
             return Err(GetGuildMembersError {
                 kind: GetGuildMembersErrorType::LimitInvalid { limit },
             });
         }
 
-        self.fields.limit.replace(limit);
+        self.fields.limit = Some(limit);
 
         Ok(self)
     }
 
     /// Sets whether to retrieve matched member presences
-    pub fn presences(mut self, presences: bool) -> Self {
-        self.fields.presences.replace(presences);
+    pub const fn presences(mut self, presences: bool) -> Self {
+        self.fields.presences = Some(presences);
 
         self
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<MemberListBody> {
         let request = Request::from_route(Route::GetGuildMembers {
             after: self.fields.after.map(|x| x.0),
             guild_id: self.guild_id.0,
@@ -164,42 +155,9 @@ impl<'a> GetGuildMembers<'a> {
             presences: self.fields.presences,
         });
 
-        self.fut.replace(Box::pin(self.http.request_bytes(request)));
+        let mut future = self.http.request(request);
+        future.set_guild_id(self.guild_id);
 
-        Ok(())
-    }
-}
-
-impl Future for GetGuildMembers<'_> {
-    type Output = Result<Vec<Member>, HttpError>;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.fut.is_none() {
-            self.as_mut().start()?;
-        }
-
-        let fut = self.fut.as_mut().expect("future is created");
-
-        match fut.as_mut().poll(cx) {
-            Poll::Ready(res) => {
-                let bytes = res?;
-                let mut members = Vec::new();
-
-                let values =
-                    crate::json::from_bytes::<Vec<Value>>(&bytes).map_err(HttpError::json)?;
-
-                for value in values {
-                    let member_deserializer = MemberDeserializer::new(self.guild_id);
-                    members.push(
-                        member_deserializer
-                            .deserialize(value)
-                            .map_err(HttpError::json)?,
-                    );
-                }
-
-                Poll::Ready(Ok(members))
-            }
-            Poll::Pending => Poll::Pending,
-        }
+        future
     }
 }

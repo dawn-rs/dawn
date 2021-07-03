@@ -14,12 +14,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     future::join_all((1u8..=10).map(|x| {
         client
             .create_message(channel_id)
-            .content(format!("Ping #{}", x))
+            .content(&format!("Ping #{}", x))
             .expect("content not a valid length")
+            .exec()
     }))
     .await;
 
-    let me = client.current_user().await?;
+    let me = client.current_user().exec().await?.model().await?;
     println!("Current user: {}#{}", me.name, me.discriminator);
 
     Ok(())

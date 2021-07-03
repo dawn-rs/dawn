@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{Pending, Request},
+    request::Request,
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use serde::Serialize;
@@ -17,14 +17,13 @@ struct UpdateUserVoiceStateFields {
 /// Update another user's voice state.
 pub struct UpdateUserVoiceState<'a> {
     fields: UpdateUserVoiceStateFields,
-    fut: Option<Pending<'a, ()>>,
     guild_id: GuildId,
     http: &'a Client,
     user_id: UserId,
 }
 
 impl<'a> UpdateUserVoiceState<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         http: &'a Client,
         guild_id: GuildId,
         user_id: UserId,
@@ -35,7 +34,6 @@ impl<'a> UpdateUserVoiceState<'a> {
                 channel_id,
                 suppress: None,
             },
-            fut: None,
             guild_id,
             http,
             user_id,
@@ -54,24 +52,26 @@ impl<'a> UpdateUserVoiceState<'a> {
     /// removed.
     ///
     /// [`MUTE_MEMBERS`]: twilight_model::guild::Permissions::MUTE_MEMBERS
-    pub fn suppress(mut self) -> Self {
-        self.fields.suppress.replace(true);
+    pub const fn suppress(mut self) -> Self {
+        self.fields.suppress = Some(true);
 
         self
     }
 
-    fn start(&mut self) -> Result<(), Error> {
-        let request = Request::builder(Route::UpdateUserVoiceState {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
+        let mut request = Request::builder(Route::UpdateUserVoiceState {
             guild_id: self.guild_id.0,
             user_id: self.user_id.0,
-        })
-        .json(&self.fields)?
-        .build();
+        });
 
-        self.fut.replace(Box::pin(self.http.verify(request)));
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(UpdateUserVoiceState<'_>, ());

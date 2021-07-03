@@ -1,8 +1,8 @@
 use super::RequestReactionType;
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, Pending, Request},
+    request::{validate, Request},
+    response::{marker::ListBody, ResponseFuture},
     routing::Route,
 };
 use std::{
@@ -62,7 +62,6 @@ pub enum GetReactionsErrorType {
     },
 }
 
-#[derive(Default)]
 struct GetReactionsFields {
     after: Option<UserId>,
     limit: Option<u64>,
@@ -74,33 +73,34 @@ struct GetReactionsFields {
 /// requests must be chained until all reactions are retireved.
 pub struct GetReactions<'a> {
     channel_id: ChannelId,
-    emoji: RequestReactionType,
+    emoji: &'a RequestReactionType<'a>,
     fields: GetReactionsFields,
-    fut: Option<Pending<'a, Vec<User>>>,
     http: &'a Client,
     message_id: MessageId,
 }
 
 impl<'a> GetReactions<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         http: &'a Client,
         channel_id: ChannelId,
         message_id: MessageId,
-        emoji: RequestReactionType,
+        emoji: &'a RequestReactionType<'a>,
     ) -> Self {
         Self {
             channel_id,
             emoji,
-            fields: GetReactionsFields::default(),
-            fut: None,
+            fields: GetReactionsFields {
+                after: None,
+                limit: None,
+            },
             http,
             message_id,
         }
     }
 
     /// Get users after this id.
-    pub fn after(mut self, after: UserId) -> Self {
-        self.fields.after.replace(after);
+    pub const fn after(mut self, after: UserId) -> Self {
+        self.fields.after = Some(after);
 
         self
     }
@@ -114,31 +114,30 @@ impl<'a> GetReactions<'a> {
     ///
     /// Returns a [`GetReactionsErrorType::LimitInvalid`] error type if the
     /// amount is greater than 100.
-    pub fn limit(mut self, limit: u64) -> Result<Self, GetReactionsError> {
+    pub const fn limit(mut self, limit: u64) -> Result<Self, GetReactionsError> {
         if !validate::get_reactions_limit(limit) {
             return Err(GetReactionsError {
                 kind: GetReactionsErrorType::LimitInvalid { limit },
             });
         }
 
-        self.fields.limit.replace(limit);
+        self.fields.limit = Some(limit);
 
         Ok(self)
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<ListBody<User>> {
         let request = Request::from_route(Route::GetReactionUsers {
             after: self.fields.after.map(|x| x.0),
             channel_id: self.channel_id.0,
-            emoji: self.emoji.display().to_string(),
+            emoji: self.emoji,
             limit: self.fields.limit,
             message_id: self.message_id.0,
         });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(GetReactions<'_>, Vec<User>);

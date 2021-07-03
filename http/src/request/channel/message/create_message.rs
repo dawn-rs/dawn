@@ -2,10 +2,12 @@ use crate::{
     client::Client,
     error::Error as HttpError,
     request::{
+        self,
         multipart::Form,
         validate::{self, EmbedValidationError},
-        Pending, Request,
+        Request,
     },
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
@@ -48,12 +50,9 @@ impl CreateMessageError {
         (self.kind, self.source)
     }
 
-    fn embed(source: EmbedValidationError, embed: Embed, idx: Option<usize>) -> Self {
+    fn embed(source: EmbedValidationError, idx: usize) -> Self {
         Self {
-            kind: CreateMessageErrorType::EmbedTooLarge {
-                embed: Box::new(embed),
-                idx,
-            },
+            kind: CreateMessageErrorType::EmbedTooLarge { idx },
             source: Some(Box::new(source)),
         }
     }
@@ -62,18 +61,12 @@ impl CreateMessageError {
 impl Display for CreateMessageError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match &self.kind {
-            CreateMessageErrorType::ContentInvalid { .. } => {
-                f.write_str("the message content is invalid")
-            }
-            CreateMessageErrorType::EmbedTooLarge { idx, .. } => {
-                if let Some(idx) = idx {
-                    f.write_str("the embed at index ")?;
-                    Display::fmt(&idx, f)?;
+            CreateMessageErrorType::ContentInvalid => f.write_str("the message content is invalid"),
+            CreateMessageErrorType::EmbedTooLarge { idx } => {
+                f.write_str("the embed at index ")?;
+                Display::fmt(&idx, f)?;
 
-                    f.write_str("'s contents are too long")
-                } else {
-                    f.write_str("the embed's contents are too long")
-                }
+                f.write_str("'s contents are too long")
             }
         }
     }
@@ -92,31 +85,26 @@ impl Error for CreateMessageError {
 #[non_exhaustive]
 pub enum CreateMessageErrorType {
     /// Returned when the content is over 2000 UTF-16 characters.
-    ContentInvalid {
-        /// Provided content.
-        content: String,
-    },
+    ContentInvalid,
     /// Returned when the length of the embed is over 6000 characters.
     EmbedTooLarge {
-        /// Provided embed.
-        embed: Box<Embed>,
-        /// Index of the embed, if there is any.
-        idx: Option<usize>,
+        /// Index of the embed.
+        idx: usize,
     },
 }
 
 #[derive(Default, Serialize)]
-pub(crate) struct CreateMessageFields {
+pub(crate) struct CreateMessageFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    embeds: Vec<Embed>,
+    content: Option<&'a str>,
+    #[serde(skip_serializing_if = "request::slice_is_empty")]
+    embeds: &'a [Embed],
     #[serde(skip_serializing_if = "Option::is_none")]
     message_reference: Option<MessageReference>,
     #[serde(skip_serializing_if = "Option::is_none")]
     nonce: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    payload_json: Option<Vec<u8>>,
+    payload_json: Option<&'a [u8]>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) allowed_mentions: Option<AllowedMentions>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -133,21 +121,21 @@ pub(crate) struct CreateMessageFields {
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 ///
 /// let channel_id = ChannelId(123);
 /// let message = client
 ///     .create_message(channel_id)
 ///     .content("Twilight is best pony")?
 ///     .tts(true)
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
 pub struct CreateMessage<'a> {
     channel_id: ChannelId,
-    pub(crate) fields: CreateMessageFields,
-    files: Vec<(String, Vec<u8>)>,
-    fut: Option<Pending<'a, Message>>,
+    pub(crate) fields: CreateMessageFields<'a>,
+    files: &'a [(&'a str, &'a [u8])],
     http: &'a Client,
 }
 
@@ -159,8 +147,7 @@ impl<'a> CreateMessage<'a> {
                 allowed_mentions: http.default_allowed_mentions(),
                 ..CreateMessageFields::default()
             },
-            files: Vec::new(),
-            fut: None,
+            files: &[],
             http,
         }
     }
@@ -180,45 +167,15 @@ impl<'a> CreateMessage<'a> {
     ///
     /// Returns a [`CreateMessageErrorType::ContentInvalid`] error type if the
     /// content length is too long.
-    pub fn content(self, content: impl Into<String>) -> Result<Self, CreateMessageError> {
-        self._content(content.into())
-    }
-
-    fn _content(mut self, content: String) -> Result<Self, CreateMessageError> {
-        if !validate::content_limit(&content) {
+    pub fn content(mut self, content: &'a str) -> Result<Self, CreateMessageError> {
+        if !validate::content_limit(content) {
             return Err(CreateMessageError {
-                kind: CreateMessageErrorType::ContentInvalid { content },
+                kind: CreateMessageErrorType::ContentInvalid,
                 source: None,
             });
         }
 
         self.fields.content.replace(content);
-
-        Ok(self)
-    }
-
-    /// Attach an embed to the message.
-    ///
-    /// Embed total character length must not exceed 6000 characters.
-    /// Additionally, the internal fields also have character limits. Refer to
-    /// [the discord docs] for more information.
-    ///
-    /// # Examples
-    ///
-    /// See [`EmbedBuilder`] for an example.
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`CreateMessageErrorType::EmbedTooLarge`] error type if the
-    /// embed is too large.
-    ///
-    /// [the discord docs]: https://discord.com/developers/docs/resources/channel#embed-limits
-    /// [`EmbedBuilder`]: https://docs.rs/twilight-embed-builder/*/twilight_embed_builder
-    pub fn embed(mut self, embed: Embed) -> Result<Self, CreateMessageError> {
-        validate::embed(&embed)
-            .map_err(|source| CreateMessageError::embed(source, embed.clone(), None))?;
-
-        self.fields.embeds.push(embed);
 
         Ok(self)
     }
@@ -235,16 +192,12 @@ impl<'a> CreateMessage<'a> {
     /// embed is too large.
     ///
     /// [the discord docs]: https://discord.com/developers/docs/resources/channel#embed-limits
-    pub fn embeds(
-        mut self,
-        embeds: impl IntoIterator<Item = Embed>,
-    ) -> Result<Self, CreateMessageError> {
-        for (idx, embed) in embeds.into_iter().enumerate() {
-            validate::embed(&embed)
-                .map_err(|source| CreateMessageError::embed(source, embed.clone(), Some(idx)))?;
-
-            self.fields.embeds.push(embed);
+    pub fn embeds(mut self, embeds: &'a [Embed]) -> Result<Self, CreateMessageError> {
+        for (idx, embed) in embeds.iter().enumerate() {
+            validate::embed(&embed).map_err(|source| CreateMessageError::embed(source, idx))?;
         }
+
+        self.fields.embeds = embeds;
 
         Ok(self)
     }
@@ -267,30 +220,18 @@ impl<'a> CreateMessage<'a> {
         self
     }
 
-    /// Attach a file to the message.
-    ///
-    /// The file is raw binary data. It can be an image, or any other kind of file.
-    pub fn file(mut self, name: impl Into<String>, file: impl Into<Vec<u8>>) -> Self {
-        self.files.push((name.into(), file.into()));
-
-        self
-    }
-
     /// Attach multiple files to the message.
-    pub fn files<N: Into<String>, F: Into<Vec<u8>>>(
-        mut self,
-        attachments: impl IntoIterator<Item = (N, F)>,
-    ) -> Self {
-        for (name, file) in attachments {
-            self = self.file(name, file);
-        }
+    ///
+    /// Calling this method multiple times will clear previously added files.
+    pub const fn files(mut self, files: &'a [(&'a str, &'a [u8])]) -> Self {
+        self.files = files;
 
         self
     }
 
     /// Attach a nonce to the message, for optimistic message sending.
-    pub fn nonce(mut self, nonce: u64) -> Self {
-        self.fields.nonce.replace(nonce);
+    pub const fn nonce(mut self, nonce: u64) -> Self {
+        self.fields.nonce = Some(nonce);
 
         self
     }
@@ -298,12 +239,12 @@ impl<'a> CreateMessage<'a> {
     /// JSON encoded body of any additional request fields.
     ///
     /// If this method is called, all other fields are ignored, except for
-    /// [`file`]. See [Discord Docs/Create Message].
+    /// [`files`]. See [Discord Docs/Create Message].
     ///
-    /// [`file`]: Self::file
+    /// [`files`]: Self::files
     /// [Discord Docs/Create Message]: https://discord.com/developers/docs/resources/channel#create-message-params
-    pub fn payload_json(mut self, payload_json: impl Into<Vec<u8>>) -> Self {
-        self.fields.payload_json.replace(payload_json.into());
+    pub const fn payload_json(mut self, payload_json: &'a [u8]) -> Self {
+        self.fields.payload_json = Some(payload_json);
 
         self
     }
@@ -330,13 +271,16 @@ impl<'a> CreateMessage<'a> {
     }
 
     /// Specify true if the message is TTS.
-    pub fn tts(mut self, tts: bool) -> Self {
-        self.fields.tts.replace(tts);
+    pub const fn tts(mut self, tts: bool) -> Self {
+        self.fields.tts = Some(tts);
 
         self
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Message> {
         let mut request = Request::builder(Route::CreateMessage {
             channel_id: self.channel_id.0,
         });
@@ -344,27 +288,29 @@ impl<'a> CreateMessage<'a> {
         if !self.files.is_empty() || self.fields.payload_json.is_some() {
             let mut form = Form::new();
 
-            for (index, (name, file)) in self.files.drain(..).enumerate() {
-                form.file(format!("{}", index).as_bytes(), name.as_bytes(), &file);
+            for (index, (name, file)) in self.files.iter().enumerate() {
+                form.file(format!("{}", index).as_bytes(), name.as_bytes(), file);
             }
 
             if let Some(payload_json) = &self.fields.payload_json {
                 form.payload_json(&payload_json);
             } else {
-                let body = crate::json::to_vec(&self.fields).map_err(HttpError::json)?;
+                let body = match crate::json::to_vec(&self.fields) {
+                    Ok(body) => body,
+                    Err(source) => return ResponseFuture::error(HttpError::json(source)),
+                };
+
                 form.payload_json(&body);
             }
 
             request = request.form(form);
         } else {
-            request = request.json(&self.fields)?;
+            request = match request.json(&self.fields) {
+                Ok(request) => request,
+                Err(source) => return ResponseFuture::error(source),
+            };
         }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(CreateMessage<'_>, Message);

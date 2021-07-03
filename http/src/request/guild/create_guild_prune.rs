@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{self, validate, AuditLogReason, AuditLogReasonError, Pending, Request},
+    request::{self, validate, AuditLogReason, AuditLogReasonError, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use std::{
@@ -66,10 +66,10 @@ pub enum CreateGuildPruneErrorType {
 }
 
 #[derive(Default)]
-struct CreateGuildPruneFields {
+struct CreateGuildPruneFields<'a> {
     compute_prune_count: Option<bool>,
     days: Option<u64>,
-    include_roles: Vec<u64>,
+    include_roles: &'a [RoleId],
 }
 
 /// Begin a guild prune.
@@ -78,18 +78,16 @@ struct CreateGuildPruneFields {
 ///
 /// [the discord docs]: https://discord.com/developers/docs/resources/guild#begin-guild-prune
 pub struct CreateGuildPrune<'a> {
-    fields: CreateGuildPruneFields,
+    fields: CreateGuildPruneFields<'a>,
     guild_id: GuildId,
-    fut: Option<Pending<'a, Option<GuildPrune>>>,
     http: &'a Client,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 impl<'a> CreateGuildPrune<'a> {
     pub(crate) fn new(http: &'a Client, guild_id: GuildId) -> Self {
         Self {
             fields: CreateGuildPruneFields::default(),
-            fut: None,
             guild_id,
             http,
             reason: None,
@@ -97,17 +95,15 @@ impl<'a> CreateGuildPrune<'a> {
     }
 
     /// List of roles to include when pruning.
-    pub fn include_roles(mut self, roles: impl Iterator<Item = RoleId>) -> Self {
-        let roles = roles.map(|e| e.0).collect::<Vec<_>>();
-
+    pub const fn include_roles(mut self, roles: &'a [RoleId]) -> Self {
         self.fields.include_roles = roles;
 
         self
     }
 
     /// Return the amount of pruned members. Discouraged for large guilds.
-    pub fn compute_prune_count(mut self, compute_prune_count: bool) -> Self {
-        self.fields.compute_prune_count.replace(compute_prune_count);
+    pub const fn compute_prune_count(mut self, compute_prune_count: bool) -> Self {
+        self.fields.compute_prune_count = Some(compute_prune_count);
 
         self
     }
@@ -120,44 +116,46 @@ impl<'a> CreateGuildPrune<'a> {
     ///
     /// Returns a [`CreateGuildPruneErrorType::DaysInvalid`] error type if the
     /// number of days is 0.
-    pub fn days(mut self, days: u64) -> Result<Self, CreateGuildPruneError> {
+    pub const fn days(mut self, days: u64) -> Result<Self, CreateGuildPruneError> {
         if !validate::guild_prune_days(days) {
             return Err(CreateGuildPruneError {
                 kind: CreateGuildPruneErrorType::DaysInvalid,
             });
         }
 
-        self.fields.days.replace(days);
+        self.fields.days = Some(days);
 
         Ok(self)
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<GuildPrune> {
         let mut request = Request::builder(Route::CreateGuildPrune {
             compute_prune_count: self.fields.compute_prune_count,
             days: self.fields.days,
             guild_id: self.guild_id.0,
-            include_roles: self.fields.include_roles.clone(),
+            include_roles: self.fields.include_roles,
         });
 
         if let Some(reason) = self.reason.as_ref() {
-            request = request.headers(request::audit_header(reason)?);
+            let header = match request::audit_header(reason) {
+                Ok(header) => header,
+                Err(source) => return ResponseFuture::error(source),
+            };
+
+            request = request.headers(header);
         }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+        self.http.request(request.build())
     }
 }
 
-impl<'a> AuditLogReason for CreateGuildPrune<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for CreateGuildPrune<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }
 }
-
-poll_req!(CreateGuildPrune<'_>, Option<GuildPrune>);

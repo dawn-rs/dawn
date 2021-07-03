@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, Pending, Request},
+    request::{validate, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
@@ -60,16 +60,13 @@ impl Error for CreateGuildFromTemplateError {}
 pub enum CreateGuildFromTemplateErrorType {
     /// Name of the guild is either fewer than 2 UTF-16 characters or more than 100 UTF-16
     /// characters.
-    NameInvalid {
-        /// Provided name.
-        name: String,
-    },
+    NameInvalid,
 }
 
 #[derive(Serialize)]
-struct CreateGuildFromTemplateFields {
-    name: String,
-    icon: Option<String>,
+struct CreateGuildFromTemplateFields<'a> {
+    name: &'a str,
+    icon: Option<&'a str>,
 }
 
 /// Create a new guild based on a template.
@@ -81,35 +78,25 @@ struct CreateGuildFromTemplateFields {
 /// Returns a [`CreateGuildFromTemplateErrorType::NameInvalid`] error type if
 /// the name is invalid.
 pub struct CreateGuildFromTemplate<'a> {
-    fields: CreateGuildFromTemplateFields,
-    fut: Option<Pending<'a, Guild>>,
+    fields: CreateGuildFromTemplateFields<'a>,
     http: &'a Client,
-    template_code: String,
+    template_code: &'a str,
 }
 
 impl<'a> CreateGuildFromTemplate<'a> {
     pub(crate) fn new(
         http: &'a Client,
-        template_code: impl Into<String>,
-        name: impl Into<String>,
-    ) -> Result<Self, CreateGuildFromTemplateError> {
-        Self::_new(http, template_code.into(), name.into())
-    }
-
-    fn _new(
-        http: &'a Client,
-        template_code: String,
-        name: String,
+        template_code: &'a str,
+        name: &'a str,
     ) -> Result<Self, CreateGuildFromTemplateError> {
         if !validate::guild_name(&name) {
             return Err(CreateGuildFromTemplateError {
-                kind: CreateGuildFromTemplateErrorType::NameInvalid { name },
+                kind: CreateGuildFromTemplateErrorType::NameInvalid,
             });
         }
 
         Ok(Self {
             fields: CreateGuildFromTemplateFields { name, icon: None },
-            fut: None,
             http,
             template_code,
         })
@@ -122,27 +109,25 @@ impl<'a> CreateGuildFromTemplate<'a> {
     /// for more information.
     ///
     /// [the discord docs]: https://discord.com/developers/docs/reference#image-data
-    pub fn icon(self, icon: impl Into<String>) -> Self {
-        self._icon(icon.into())
-    }
-
-    fn _icon(mut self, icon: String) -> Self {
-        self.fields.icon.replace(icon);
+    pub const fn icon(mut self, icon: &'a str) -> Self {
+        self.fields.icon = Some(icon);
 
         self
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
-        let request = Request::builder(Route::CreateGuildFromTemplate {
-            template_code: self.template_code.clone(),
-        })
-        .json(&self.fields)?
-        .build();
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Guild> {
+        let mut request = Request::builder(Route::CreateGuildFromTemplate {
+            template_code: self.template_code,
+        });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(CreateGuildFromTemplate<'_>, Guild);

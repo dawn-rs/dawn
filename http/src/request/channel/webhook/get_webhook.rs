@@ -1,29 +1,21 @@
-use crate::{
-    client::Client,
-    error::Error,
-    request::{PendingOption, Request},
-    routing::Route,
-};
+use crate::{client::Client, request::Request, response::ResponseFuture, routing::Route};
 use twilight_model::{channel::Webhook, id::WebhookId};
 
-#[derive(Default)]
-struct GetWebhookFields {
-    token: Option<String>,
+struct GetWebhookFields<'a> {
+    token: Option<&'a str>,
 }
 
 /// Get a webhook by ID.
 pub struct GetWebhook<'a> {
-    fields: GetWebhookFields,
-    fut: Option<PendingOption<'a>>,
+    fields: GetWebhookFields<'a>,
     http: &'a Client,
     id: WebhookId,
 }
 
 impl<'a> GetWebhook<'a> {
-    pub(crate) fn new(http: &'a Client, id: WebhookId) -> Self {
+    pub(crate) const fn new(http: &'a Client, id: WebhookId) -> Self {
         Self {
-            fields: GetWebhookFields::default(),
-            fut: None,
+            fields: GetWebhookFields { token: None },
             http,
             id,
         }
@@ -31,29 +23,29 @@ impl<'a> GetWebhook<'a> {
 
     /// Specify the token for auth, if not already authenticated with a Bot
     /// token.
-    pub fn token(mut self, token: impl Into<String>) -> Self {
-        self.fields.token.replace(token.into());
+    pub const fn token(mut self, token: &'a str) -> Self {
+        self.fields.token = Some(token);
 
         self
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Webhook> {
+        let use_webhook_token = self.fields.token.is_some();
+
         let mut request = Request::builder(Route::GetWebhook {
-            token: self.fields.token.clone(),
+            token: self.fields.token,
             webhook_id: self.id.0,
         });
 
         // If a webhook token has been configured, then we don't need to use
         // the client's authorization token.
-        if self.fields.token.is_some() {
+        if use_webhook_token {
             request = request.use_authorization_token(false);
         }
 
-        self.fut
-            .replace(Box::pin(self.http.request_bytes(request.build())));
-
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(opt, GetWebhook<'_>, Webhook);

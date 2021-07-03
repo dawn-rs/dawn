@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, Pending, Request},
+    request::{validate, Request},
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use serde::Serialize;
@@ -46,7 +46,7 @@ impl CreateStageInstanceError {
 impl Display for CreateStageInstanceError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match &self.kind {
-            CreateStageInstanceErrorType::InvalidTopic { .. } => f.write_str("invalid topic"),
+            CreateStageInstanceErrorType::InvalidTopic => f.write_str("invalid topic"),
         }
     }
 }
@@ -62,26 +62,22 @@ impl Error for CreateStageInstanceError {
 #[derive(Debug)]
 pub enum CreateStageInstanceErrorType {
     /// Topic is not between 1 and 120 characters in length.
-    InvalidTopic {
-        /// Invalid topic.
-        topic: String,
-    },
+    InvalidTopic,
 }
 
-#[derive(Default, Serialize)]
-struct CreateStageInstanceFields {
+#[derive(Serialize)]
+struct CreateStageInstanceFields<'a> {
     channel_id: ChannelId,
     #[serde(skip_serializing_if = "Option::is_none")]
     privacy_level: Option<PrivacyLevel>,
-    topic: String,
+    topic: &'a str,
 }
 
 /// Create a new stage instance associated with a stage channel.
 ///
 /// Requires the user to be a moderator of the stage channel.
 pub struct CreateStageInstance<'a> {
-    fields: CreateStageInstanceFields,
-    fut: Option<Pending<'a, ()>>,
+    fields: CreateStageInstanceFields<'a>,
     http: &'a Client,
 }
 
@@ -89,19 +85,11 @@ impl<'a> CreateStageInstance<'a> {
     pub(crate) fn new(
         http: &'a Client,
         channel_id: ChannelId,
-        topic: impl Into<String>,
+        topic: &'a str,
     ) -> Result<Self, CreateStageInstanceError> {
-        Self::_new(http, channel_id, topic.into())
-    }
-
-    fn _new(
-        http: &'a Client,
-        channel_id: ChannelId,
-        topic: String,
-    ) -> Result<Self, CreateStageInstanceError> {
-        if !validate::stage_topic(&topic) {
+        if !validate::stage_topic(topic) {
             return Err(CreateStageInstanceError {
-                kind: CreateStageInstanceErrorType::InvalidTopic { topic },
+                kind: CreateStageInstanceErrorType::InvalidTopic,
                 source: None,
             });
         }
@@ -109,30 +97,31 @@ impl<'a> CreateStageInstance<'a> {
         Ok(Self {
             fields: CreateStageInstanceFields {
                 channel_id,
+                privacy_level: None,
                 topic,
-                ..CreateStageInstanceFields::default()
             },
-            fut: None,
             http,
         })
     }
 
     /// Set the [`PrivacyLevel`] of the instance.
-    pub fn privacy_level(mut self, privacy_level: PrivacyLevel) -> Self {
-        self.fields.privacy_level.replace(privacy_level);
+    pub const fn privacy_level(mut self, privacy_level: PrivacyLevel) -> Self {
+        self.fields.privacy_level = Some(privacy_level);
 
         self
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
-        let request = Request::builder(Route::CreateStageInstance)
-            .json(&self.fields)?
-            .build();
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
+        let mut request = Request::builder(Route::CreateStageInstance);
 
-        self.fut.replace(Box::pin(self.http.verify(request)));
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(CreateStageInstance<'_>, ());

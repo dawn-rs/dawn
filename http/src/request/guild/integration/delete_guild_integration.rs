@@ -1,24 +1,26 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{self, AuditLogReason, AuditLogReasonError, Pending, Request},
+    request::{self, AuditLogReason, AuditLogReasonError, Request},
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use twilight_model::id::{GuildId, IntegrationId};
 
 /// Delete an integration for a guild, by the integration's id.
 pub struct DeleteGuildIntegration<'a> {
-    fut: Option<Pending<'a, ()>>,
     guild_id: GuildId,
     http: &'a Client,
     integration_id: IntegrationId,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 impl<'a> DeleteGuildIntegration<'a> {
-    pub(crate) fn new(http: &'a Client, guild_id: GuildId, integration_id: IntegrationId) -> Self {
+    pub(crate) const fn new(
+        http: &'a Client,
+        guild_id: GuildId,
+        integration_id: IntegrationId,
+    ) -> Self {
         Self {
-            fut: None,
             guild_id,
             http,
             integration_id,
@@ -26,30 +28,32 @@ impl<'a> DeleteGuildIntegration<'a> {
         }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
         let mut request = Request::builder(Route::DeleteGuildIntegration {
             guild_id: self.guild_id.0,
             integration_id: self.integration_id.0,
         });
 
         if let Some(reason) = self.reason.as_ref() {
-            request = request.headers(request::audit_header(reason)?);
+            let header = match request::audit_header(reason) {
+                Ok(header) => header,
+                Err(source) => return ResponseFuture::error(source),
+            };
+
+            request = request.headers(header);
         }
 
-        self.fut
-            .replace(Box::pin(self.http.verify(request.build())));
-
-        Ok(())
+        self.http.request(request.build())
     }
 }
 
-impl<'a> AuditLogReason for DeleteGuildIntegration<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for DeleteGuildIntegration<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }
 }
-
-poll_req!(DeleteGuildIntegration<'_>, ());

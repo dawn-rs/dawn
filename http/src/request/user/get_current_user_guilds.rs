@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, Pending, Request},
+    request::{validate, Request},
+    response::{marker::ListBody, ResponseFuture},
     routing::Route,
 };
 use std::{
@@ -45,9 +45,7 @@ impl GetCurrentUserGuildsError {
 impl Display for GetCurrentUserGuildsError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match &self.kind {
-            GetCurrentUserGuildsErrorType::LimitInvalid { .. } => {
-                f.write_str("the limit is invalid")
-            }
+            GetCurrentUserGuildsErrorType::LimitInvalid => f.write_str("the limit is invalid"),
         }
     }
 }
@@ -59,10 +57,7 @@ impl Error for GetCurrentUserGuildsError {}
 #[non_exhaustive]
 pub enum GetCurrentUserGuildsErrorType {
     /// The maximum number of guilds to retrieve is 0 or more than 100.
-    LimitInvalid {
-        /// Provided maximum number of guilds to retrieve.
-        limit: u64,
-    },
+    LimitInvalid,
 }
 
 struct GetCurrentUserGuildsFields {
@@ -84,7 +79,7 @@ struct GetCurrentUserGuildsFields {
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 ///
 /// let after = GuildId(300);
 /// let before = GuildId(400);
@@ -92,38 +87,37 @@ struct GetCurrentUserGuildsFields {
 ///     .after(after)
 ///     .before(before)
 ///     .limit(25)?
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
 pub struct GetCurrentUserGuilds<'a> {
     fields: GetCurrentUserGuildsFields,
-    fut: Option<Pending<'a, Vec<CurrentUserGuild>>>,
     http: &'a Client,
 }
 
 impl<'a> GetCurrentUserGuilds<'a> {
-    pub(crate) fn new(http: &'a Client) -> Self {
+    pub(crate) const fn new(http: &'a Client) -> Self {
         Self {
             fields: GetCurrentUserGuildsFields {
                 after: None,
                 before: None,
                 limit: None,
             },
-            fut: None,
             http,
         }
     }
 
     /// Get guilds after this guild id.
-    pub fn after(mut self, guild_id: GuildId) -> Self {
-        self.fields.after.replace(guild_id);
+    pub const fn after(mut self, guild_id: GuildId) -> Self {
+        self.fields.after = Some(guild_id);
 
         self
     }
 
     /// Get guilds before this guild id.
-    pub fn before(mut self, guild_id: GuildId) -> Self {
-        self.fields.before.replace(guild_id);
+    pub const fn before(mut self, guild_id: GuildId) -> Self {
+        self.fields.before = Some(guild_id);
 
         self
     }
@@ -138,29 +132,28 @@ impl<'a> GetCurrentUserGuilds<'a> {
     /// the amount is greater than 100.
     ///
     /// [the discord docs]: https://discordapp.com/developers/docs/resources/user#get-current-user-guilds-query-string-params
-    pub fn limit(mut self, limit: u64) -> Result<Self, GetCurrentUserGuildsError> {
+    pub const fn limit(mut self, limit: u64) -> Result<Self, GetCurrentUserGuildsError> {
         if !validate::get_current_user_guilds_limit(limit) {
             return Err(GetCurrentUserGuildsError {
-                kind: GetCurrentUserGuildsErrorType::LimitInvalid { limit },
+                kind: GetCurrentUserGuildsErrorType::LimitInvalid,
             });
         }
 
-        self.fields.limit.replace(limit);
+        self.fields.limit = Some(limit);
 
         Ok(self)
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<ListBody<CurrentUserGuild>> {
         let request = Request::from_route(Route::GetGuilds {
             after: self.fields.after.map(|x| x.0),
             before: self.fields.before.map(|x| x.0),
             limit: self.fields.limit,
         });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(GetCurrentUserGuilds<'_>, Vec<CurrentUserGuild>);

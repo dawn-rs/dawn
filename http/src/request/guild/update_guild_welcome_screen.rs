@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{Pending, Request},
+    request::{self, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
@@ -11,13 +11,13 @@ use twilight_model::{
 };
 
 #[derive(Default, Serialize)]
-struct UpdateGuildWelcomeScreenFields {
+struct UpdateGuildWelcomeScreenFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
-    description: Option<String>,
+    description: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     enabled: Option<bool>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    welcome_channels: Vec<WelcomeScreenChannel>,
+    #[serde(skip_serializing_if = "request::slice_is_empty")]
+    welcome_channels: &'a [WelcomeScreenChannel],
 }
 
 /// Update the guild's welcome screen.
@@ -26,61 +26,58 @@ struct UpdateGuildWelcomeScreenFields {
 ///
 /// [`MANAGE_GUILD`]: twilight_model::guild::Permissions::MANAGE_GUILD
 pub struct UpdateGuildWelcomeScreen<'a> {
-    fields: UpdateGuildWelcomeScreenFields,
-    fut: Option<Pending<'a, WelcomeScreen>>,
+    fields: UpdateGuildWelcomeScreenFields<'a>,
     guild_id: GuildId,
     http: &'a Client,
 }
 
 impl<'a> UpdateGuildWelcomeScreen<'a> {
-    pub(crate) fn new(http: &'a Client, guild_id: GuildId) -> Self {
+    pub(crate) const fn new(http: &'a Client, guild_id: GuildId) -> Self {
         Self {
-            fields: UpdateGuildWelcomeScreenFields::default(),
-            fut: None,
+            fields: UpdateGuildWelcomeScreenFields {
+                description: None,
+                enabled: None,
+                welcome_channels: &[],
+            },
             guild_id,
             http,
         }
     }
 
     /// Set the description of the welcome screen.
-    pub fn description(self, description: impl Into<String>) -> Self {
-        self._description(description.into())
-    }
-
-    fn _description(mut self, description: String) -> Self {
-        self.fields.description.replace(description);
+    pub const fn description(mut self, description: &'a str) -> Self {
+        self.fields.description = Some(description);
 
         self
     }
 
     /// Set whether the welcome screen is enabled.
-    pub fn enabled(mut self, enabled: bool) -> Self {
-        self.fields.enabled.replace(enabled);
+    pub const fn enabled(mut self, enabled: bool) -> Self {
+        self.fields.enabled = Some(enabled);
 
         self
     }
 
     /// Set the channels linked in the welcome screen, with associated metadata.
-    pub fn welcome_channels(
-        mut self,
-        welcome_channels: impl IntoIterator<Item = WelcomeScreenChannel>,
-    ) -> Self {
-        self.fields.welcome_channels = welcome_channels.into_iter().collect();
+    pub const fn welcome_channels(mut self, welcome_channels: &'a [WelcomeScreenChannel]) -> Self {
+        self.fields.welcome_channels = welcome_channels;
 
         self
     }
 
-    fn start(&mut self) -> Result<(), Error> {
-        let request = Request::builder(Route::UpdateGuildWelcomeScreen {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<WelcomeScreen> {
+        let mut request = Request::builder(Route::UpdateGuildWelcomeScreen {
             guild_id: self.guild_id.0,
-        })
-        .json(&self.fields)?
-        .build();
+        });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(UpdateGuildWelcomeScreen<'_>, WelcomeScreen);

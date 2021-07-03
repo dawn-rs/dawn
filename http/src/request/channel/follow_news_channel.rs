@@ -1,9 +1,4 @@
-use crate::{
-    client::Client,
-    error::Error,
-    request::{Pending, Request},
-    routing::Route,
-};
+use crate::{client::Client, request::Request, response::ResponseFuture, routing::Route};
 use serde::Serialize;
 use twilight_model::{channel::FollowedChannel, id::ChannelId};
 
@@ -16,35 +11,35 @@ struct FollowNewsChannelFields {
 pub struct FollowNewsChannel<'a> {
     channel_id: ChannelId,
     fields: FollowNewsChannelFields,
-    fut: Option<Pending<'a, FollowedChannel>>,
     http: &'a Client,
 }
 
 impl<'a> FollowNewsChannel<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         http: &'a Client,
         channel_id: ChannelId,
         webhook_channel_id: ChannelId,
     ) -> Self {
         Self {
             channel_id,
-            fut: None,
             http,
             fields: FollowNewsChannelFields { webhook_channel_id },
         }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
-        let request = Request::builder(Route::FollowNewsChannel {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<FollowedChannel> {
+        let mut request = Request::builder(Route::FollowNewsChannel {
             channel_id: self.channel_id.0,
-        })
-        .json(&self.fields)?
-        .build();
+        });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(FollowNewsChannel<'_>, FollowedChannel);

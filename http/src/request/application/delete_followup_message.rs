@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{Pending, Request},
+    request::Request,
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use twilight_model::id::{ApplicationId, MessageId};
@@ -19,52 +19,47 @@ use twilight_model::id::{ApplicationId, MessageId};
 /// let client = Client::new(env::var("DISCORD_TOKEN")?);
 /// client
 ///     .delete_followup_message("token here", MessageId(2))?
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
 pub struct DeleteFollowupMessage<'a> {
-    fut: Option<Pending<'a, ()>>,
     http: &'a Client,
     message_id: MessageId,
-    token: String,
+    token: &'a str,
     application_id: ApplicationId,
 }
 
 impl<'a> DeleteFollowupMessage<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         http: &'a Client,
         application_id: ApplicationId,
-        token: impl Into<String>,
+        token: &'a str,
         message_id: MessageId,
     ) -> Self {
         Self {
-            fut: None,
             http,
             message_id,
-            token: token.into(),
+            token,
             application_id,
         }
     }
 
-    fn request(&self) -> Result<Request, Error> {
-        let request = Request::from_route(Route::DeleteWebhookMessage {
+    const fn request(self) -> Request<'a> {
+        Request::from_route(Route::DeleteWebhookMessage {
             message_id: self.message_id.0,
-            token: self.token.clone(),
+            token: self.token,
             webhook_id: self.application_id.0,
-        });
-
-        Ok(request)
+        })
     }
 
-    fn start(&mut self) -> Result<(), Error> {
-        let request = self.request()?;
-        self.fut.replace(Box::pin(self.http.verify(request)));
-
-        Ok(())
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
+        self.http.request(self.request())
     }
 }
-
-poll_req!(DeleteFollowupMessage<'_>, ());
 
 #[cfg(test)]
 mod tests {
@@ -74,18 +69,17 @@ mod tests {
 
     #[test]
     fn test_request() {
-        let client = Client::new("token");
+        let client = Client::new("token".to_owned());
 
         let builder = DeleteFollowupMessage::new(&client, ApplicationId(1), "token", MessageId(2));
-        let actual = builder.request().expect("failed to create request");
+        let actual = builder.request();
 
         let expected = Request::from_route(Route::DeleteWebhookMessage {
             message_id: 2,
-            token: "token".to_owned(),
+            token: "token",
             webhook_id: 1,
         });
 
-        assert_eq!(expected.body, actual.body);
-        assert_eq!(expected.path, actual.path);
+        assert_eq!(expected.route, actual.route);
     }
 }

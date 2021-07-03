@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{self, AuditLogReason, AuditLogReasonError, NullableField, Pending, Request},
+    request::{self, AuditLogReason, AuditLogReasonError, NullableField, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
@@ -10,31 +10,33 @@ use twilight_model::{
     id::{ChannelId, WebhookId},
 };
 
-#[derive(Default, Serialize)]
-struct UpdateWebhookFields {
+#[derive(Serialize)]
+struct UpdateWebhookFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
-    avatar: Option<NullableField<String>>,
+    avatar: Option<NullableField<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     channel_id: Option<ChannelId>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<NullableField<String>>,
+    name: Option<NullableField<&'a str>>,
 }
 
 /// Update a webhook by ID.
 pub struct UpdateWebhook<'a> {
-    fields: UpdateWebhookFields,
-    fut: Option<Pending<'a, Webhook>>,
+    fields: UpdateWebhookFields<'a>,
     http: &'a Client,
     webhook_id: WebhookId,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 /// Update a webhook by its ID.
 impl<'a> UpdateWebhook<'a> {
-    pub(crate) fn new(http: &'a Client, webhook_id: WebhookId) -> Self {
+    pub(crate) const fn new(http: &'a Client, webhook_id: WebhookId) -> Self {
         Self {
-            fields: UpdateWebhookFields::default(),
-            fut: None,
+            fields: UpdateWebhookFields {
+                avatar: None,
+                channel_id: None,
+                name: None,
+            },
             http,
             webhook_id,
             reason: None,
@@ -48,55 +50,57 @@ impl<'a> UpdateWebhook<'a> {
     /// base64-encoded image.
     ///
     /// [Discord Docs/Image Data]: https://discord.com/developers/docs/reference#image-data
-    pub fn avatar(mut self, avatar: impl Into<Option<String>>) -> Self {
-        self.fields
-            .avatar
-            .replace(NullableField::from_option(avatar.into()));
+    pub const fn avatar(mut self, avatar: Option<&'a str>) -> Self {
+        self.fields.avatar = Some(NullableField(avatar));
 
         self
     }
 
     /// Move this webhook to a new channel.
-    pub fn channel_id(mut self, channel_id: impl Into<ChannelId>) -> Self {
-        self.fields.channel_id.replace(channel_id.into());
+    pub const fn channel_id(mut self, channel_id: ChannelId) -> Self {
+        self.fields.channel_id = Some(channel_id);
 
         self
     }
 
     /// Change the name of the webhook.
-    pub fn name(mut self, name: impl Into<Option<String>>) -> Self {
-        self.fields
-            .name
-            .replace(NullableField::from_option(name.into()));
+    pub const fn name(mut self, name: Option<&'a str>) -> Self {
+        self.fields.name = Some(NullableField(name));
 
         self
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Webhook> {
         let mut request = Request::builder(Route::UpdateWebhook {
             token: None,
             webhook_id: self.webhook_id.0,
-        })
-        .json(&self.fields)?;
+        });
+
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
         if let Some(reason) = self.reason.as_ref() {
-            request = request.headers(request::audit_header(reason)?);
+            let header = match request::audit_header(reason) {
+                Ok(header) => header,
+                Err(source) => return ResponseFuture::error(source),
+            };
+
+            request = request.headers(header);
         }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+        self.http.request(request.build())
     }
 }
 
-impl<'a> AuditLogReason for UpdateWebhook<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for UpdateWebhook<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }
 }
-
-poll_req!(UpdateWebhook<'_>, Webhook);

@@ -51,7 +51,7 @@ impl ClusterBuilder {
 
         let token = token.into_boxed_str();
 
-        let http_client = Client::new(token.clone());
+        let http_client = Client::new(token.to_string());
 
         let shard_config =
             ShardBuilder::new(token.clone(), intents).http_client(http_client.clone());
@@ -86,16 +86,13 @@ impl ClusterBuilder {
         ClusterStartError,
     > {
         if (self.1).0.gateway_url.is_none() {
-            let gateway_url = (self.1)
-                .0
-                .http_client
-                .gateway()
-                .authed()
-                .await
-                .ok()
-                .map(|s| s.url);
+            let maybe_response = (self.1).0.http_client.gateway().authed().exec().await;
 
-            self = self.gateway_url(gateway_url);
+            if let Ok(response) = maybe_response {
+                let gateway_url = response.model().await.ok().map(|info| info.url);
+
+                self = self.gateway_url(gateway_url);
+            }
         }
 
         self.0.shard_config = (self.1).0;

@@ -1,24 +1,22 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{self, AuditLogReason, AuditLogReasonError, Pending, Request},
+    request::{self, AuditLogReason, AuditLogReasonError, Request},
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use twilight_model::id::{GuildId, UserId};
 
 /// Kick a member from a guild, by their id.
 pub struct RemoveMember<'a> {
-    fut: Option<Pending<'a, ()>>,
     guild_id: GuildId,
     http: &'a Client,
     user_id: UserId,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 impl<'a> RemoveMember<'a> {
-    pub(crate) fn new(http: &'a Client, guild_id: GuildId, user_id: UserId) -> Self {
+    pub(crate) const fn new(http: &'a Client, guild_id: GuildId, user_id: UserId) -> Self {
         Self {
-            fut: None,
             guild_id,
             http,
             user_id,
@@ -26,30 +24,32 @@ impl<'a> RemoveMember<'a> {
         }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
         let mut request = Request::builder(Route::RemoveMember {
             guild_id: self.guild_id.0,
             user_id: self.user_id.0,
         });
 
         if let Some(reason) = self.reason.as_ref() {
-            request = request.headers(request::audit_header(reason)?);
+            let header = match request::audit_header(reason) {
+                Ok(header) => header,
+                Err(source) => return ResponseFuture::error(source),
+            };
+
+            request = request.headers(header);
         }
 
-        self.fut
-            .replace(Box::pin(self.http.verify(request.build())));
-
-        Ok(())
+        self.http.request(request.build())
     }
 }
 
-impl<'a> AuditLogReason for RemoveMember<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for RemoveMember<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }
 }
-
-poll_req!(RemoveMember<'_>, ());

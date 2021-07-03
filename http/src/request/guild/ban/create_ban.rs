@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, AuditLogReason, AuditLogReasonError, Pending, Request},
+    request::{validate, AuditLogReason, AuditLogReasonError, Request},
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use std::{
@@ -40,7 +40,7 @@ impl CreateBanError {
 impl Display for CreateBanError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match &self.kind {
-            CreateBanErrorType::DeleteMessageDaysInvalid { .. } => {
+            CreateBanErrorType::DeleteMessageDaysInvalid => {
                 f.write_str("the number of days' worth of messages to delete is invalid")
             }
         }
@@ -54,16 +54,12 @@ impl Error for CreateBanError {}
 #[non_exhaustive]
 pub enum CreateBanErrorType {
     /// The number of days' worth of messages to delete is greater than 7.
-    DeleteMessageDaysInvalid {
-        /// Provided number of days' worth of messages to delete.
-        days: u64,
-    },
+    DeleteMessageDaysInvalid,
 }
 
-#[derive(Default)]
-struct CreateBanFields {
+struct CreateBanFields<'a> {
     delete_message_days: Option<u64>,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 /// Bans a user from a guild, optionally with the number of days' worth of
@@ -80,29 +76,31 @@ struct CreateBanFields {
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 ///
 /// let guild_id = GuildId(100);
 /// let user_id = UserId(200);
 /// client.create_ban(guild_id, user_id)
 ///     .delete_message_days(1)?
 ///     .reason("memes")?
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
 pub struct CreateBan<'a> {
-    fields: CreateBanFields,
-    fut: Option<Pending<'a, ()>>,
+    fields: CreateBanFields<'a>,
     guild_id: GuildId,
     http: &'a Client,
     user_id: UserId,
 }
 
 impl<'a> CreateBan<'a> {
-    pub(crate) fn new(http: &'a Client, guild_id: GuildId, user_id: UserId) -> Self {
+    pub(crate) const fn new(http: &'a Client, guild_id: GuildId, user_id: UserId) -> Self {
         Self {
-            fields: CreateBanFields::default(),
-            fut: None,
+            fields: CreateBanFields {
+                delete_message_days: None,
+                reason: None,
+            },
             guild_id,
             http,
             user_id,
@@ -117,40 +115,39 @@ impl<'a> CreateBan<'a> {
     ///
     /// Returns a [`CreateBanErrorType::DeleteMessageDaysInvalid`] error type if
     /// the number of days is greater than 7.
-    pub fn delete_message_days(mut self, days: u64) -> Result<Self, CreateBanError> {
+    pub const fn delete_message_days(mut self, days: u64) -> Result<Self, CreateBanError> {
         if !validate::ban_delete_message_days(days) {
             return Err(CreateBanError {
-                kind: CreateBanErrorType::DeleteMessageDaysInvalid { days },
+                kind: CreateBanErrorType::DeleteMessageDaysInvalid,
             });
         }
 
-        self.fields.delete_message_days.replace(days);
+        self.fields.delete_message_days = Some(days);
 
         Ok(self)
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
         let request = Request::from_route(Route::CreateBan {
             delete_message_days: self.fields.delete_message_days,
             guild_id: self.guild_id.0,
-            reason: self.fields.reason.clone(),
+            reason: self.fields.reason,
             user_id: self.user_id.0,
         });
 
-        self.fut.replace(Box::pin(self.http.verify(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
 
-impl<'a> AuditLogReason for CreateBan<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
+impl<'a> AuditLogReason<'a> for CreateBan<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
         self.fields
             .reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+            .replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }
 }
-
-poll_req!(CreateBan<'_>, ());

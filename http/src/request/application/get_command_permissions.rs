@@ -1,9 +1,4 @@
-use crate::{
-    client::Client,
-    error::Error,
-    request::{Pending, Request},
-    routing::Route,
-};
+use crate::{client::Client, request::Request, response::ResponseFuture, routing::Route};
 use twilight_model::{
     application::command::permissions::GuildCommandPermissions,
     id::{ApplicationId, CommandId, GuildId},
@@ -14,12 +9,11 @@ pub struct GetCommandPermissions<'a> {
     application_id: ApplicationId,
     command_id: CommandId,
     guild_id: GuildId,
-    fut: Option<Pending<'a, GuildCommandPermissions>>,
     http: &'a Client,
 }
 
 impl<'a> GetCommandPermissions<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         http: &'a Client,
         application_id: ApplicationId,
         guild_id: GuildId,
@@ -29,22 +23,20 @@ impl<'a> GetCommandPermissions<'a> {
             application_id,
             command_id,
             guild_id,
-            fut: None,
             http,
         }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<GuildCommandPermissions> {
         let request = Request::from_route(Route::GetCommandPermissions {
             application_id: self.application_id.0,
             command_id: self.command_id.0,
             guild_id: self.guild_id.0,
         });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(GetCommandPermissions<'_>, GuildCommandPermissions);

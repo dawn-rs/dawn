@@ -1,9 +1,4 @@
-use crate::{
-    client::Client,
-    error::Error,
-    request::{PendingOption, Request},
-    routing::Route,
-};
+use crate::{client::Client, request::Request, response::ResponseFuture, routing::Route};
 use twilight_model::{
     guild::Emoji,
     id::{EmojiId, GuildId},
@@ -21,41 +16,38 @@ use twilight_model::{
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 ///
 /// let guild_id = GuildId(50);
 /// let emoji_id = EmojiId(100);
 ///
-/// client.emoji(guild_id, emoji_id).await?;
+/// client.emoji(guild_id, emoji_id).exec().await?;
 /// # Ok(()) }
 /// ```
 pub struct GetEmoji<'a> {
     emoji_id: EmojiId,
-    fut: Option<PendingOption<'a>>,
     guild_id: GuildId,
     http: &'a Client,
 }
 
 impl<'a> GetEmoji<'a> {
-    pub(crate) fn new(http: &'a Client, guild_id: GuildId, emoji_id: EmojiId) -> Self {
+    pub(crate) const fn new(http: &'a Client, guild_id: GuildId, emoji_id: EmojiId) -> Self {
         Self {
             emoji_id,
-            fut: None,
             guild_id,
             http,
         }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Emoji> {
         let request = Request::from_route(Route::GetEmoji {
             emoji_id: self.emoji_id.0,
             guild_id: self.guild_id.0,
         });
 
-        self.fut.replace(Box::pin(self.http.request_bytes(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(opt, GetEmoji<'_>, Emoji);

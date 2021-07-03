@@ -1,17 +1,17 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{self, AuditLogReason, AuditLogReasonError, Pending, Request},
+    request::{self, AuditLogReason, AuditLogReasonError, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
 use twilight_model::{channel::Webhook, id::ChannelId};
 
 #[derive(Serialize)]
-struct CreateWebhookFields {
+struct CreateWebhookFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
-    avatar: Option<String>,
-    name: String,
+    avatar: Option<&'a str>,
+    name: &'a str,
 }
 
 /// Create a webhook in a channel.
@@ -24,31 +24,27 @@ struct CreateWebhookFields {
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 /// let channel_id = ChannelId(123);
 ///
 /// let webhook = client
 ///     .create_webhook(channel_id, "Twily Bot")
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
 pub struct CreateWebhook<'a> {
     channel_id: ChannelId,
-    fields: CreateWebhookFields,
-    fut: Option<Pending<'a, Webhook>>,
+    fields: CreateWebhookFields<'a>,
     http: &'a Client,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 impl<'a> CreateWebhook<'a> {
-    pub(crate) fn new(http: &'a Client, channel_id: ChannelId, name: impl Into<String>) -> Self {
+    pub(crate) const fn new(http: &'a Client, channel_id: ChannelId, name: &'a str) -> Self {
         Self {
             channel_id,
-            fields: CreateWebhookFields {
-                avatar: None,
-                name: name.into(),
-            },
-            fut: None,
+            fields: CreateWebhookFields { avatar: None, name },
             http,
             reason: None,
         }
@@ -61,36 +57,42 @@ impl<'a> CreateWebhook<'a> {
     /// for more information.
     ///
     /// [the discord docs]: https://discord.com/developers/docs/reference#image-data
-    pub fn avatar(mut self, avatar: impl Into<String>) -> Self {
-        self.fields.avatar.replace(avatar.into());
+    pub const fn avatar(mut self, avatar: &'a str) -> Self {
+        self.fields.avatar = Some(avatar);
 
         self
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Webhook> {
         let mut request = Request::builder(Route::CreateWebhook {
             channel_id: self.channel_id.0,
-        })
-        .json(&self.fields)?;
+        });
+
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
         if let Some(reason) = self.reason.as_ref() {
-            request = request.headers(request::audit_header(reason)?);
+            let header = match request::audit_header(reason) {
+                Ok(header) => header,
+                Err(source) => return ResponseFuture::error(source),
+            };
+
+            request = request.headers(header);
         }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+        self.http.request(request.build())
     }
 }
 
-impl<'a> AuditLogReason for CreateWebhook<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for CreateWebhook<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }
 }
-
-poll_req!(CreateWebhook<'_>, Webhook);

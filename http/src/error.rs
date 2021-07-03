@@ -1,14 +1,9 @@
-use crate::api_error::ApiError;
-use hyper::{Body, Response, StatusCode};
+use crate::{api_error::ApiError, json::JsonError, response::StatusCode};
+use hyper::{Body, Response};
 use std::{
     error::Error as StdError,
     fmt::{Debug, Display, Formatter, Result as FmtResult},
 };
-
-#[cfg(not(feature = "simd-json"))]
-use serde_json::Error as JsonError;
-#[cfg(feature = "simd-json")]
-use simd_json::Error as JsonError;
 
 #[derive(Debug)]
 pub struct Error {

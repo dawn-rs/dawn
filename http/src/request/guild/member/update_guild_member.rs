@@ -1,29 +1,16 @@
 use crate::{
     client::Client,
     error::Error as HttpError,
-    request::{
-        self, validate, AuditLogReason, AuditLogReasonError, NullableField, Pending, Request,
-    },
+    request::{self, validate, AuditLogReason, AuditLogReasonError, NullableField, Request},
+    response::{marker::MemberBody, ResponseFuture},
     routing::Route,
 };
-use hyper::body::Bytes;
-use serde::{de::DeserializeSeed, Serialize};
+use serde::Serialize;
 use std::{
     error::Error,
     fmt::{Display, Formatter, Result as FmtResult},
-    future::Future,
-    pin::Pin,
-    task::{Context, Poll},
 };
-use twilight_model::{
-    guild::member::{Member, MemberDeserializer},
-    id::{ChannelId, GuildId, RoleId, UserId},
-};
-
-#[cfg(not(feature = "simd-json"))]
-use serde_json::Value;
-#[cfg(feature = "simd-json")]
-use simd_json::value::OwnedValue as Value;
+use twilight_model::id::{ChannelId, GuildId, RoleId, UserId};
 
 /// The error created when the member can not be updated as configured.
 #[derive(Debug)]
@@ -60,7 +47,7 @@ impl UpdateGuildMemberError {
 impl Display for UpdateGuildMemberError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match &self.kind {
-            UpdateGuildMemberErrorType::NicknameInvalid { .. } => {
+            UpdateGuildMemberErrorType::NicknameInvalid => {
                 f.write_str("the nickname length is invalid")
             }
         }
@@ -74,11 +61,12 @@ impl Error for UpdateGuildMemberError {}
 #[non_exhaustive]
 pub enum UpdateGuildMemberErrorType {
     /// The nickname is either empty or the length is more than 32 UTF-16 characters.
-    NicknameInvalid { nickname: String },
+    NicknameInvalid,
 }
 
-#[derive(Default, Serialize)]
-struct UpdateGuildMemberFields {
+#[derive(Serialize)]
+struct UpdateGuildMemberFields<'a> {
+    #[allow(clippy::option_option)]
     #[serde(skip_serializing_if = "Option::is_none")]
     channel_id: Option<NullableField<ChannelId>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -86,9 +74,9 @@ struct UpdateGuildMemberFields {
     #[serde(skip_serializing_if = "Option::is_none")]
     mute: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    nick: Option<NullableField<String>>,
+    nick: Option<NullableField<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    roles: Option<Vec<RoleId>>,
+    roles: Option<&'a [RoleId]>,
 }
 
 /// Update a guild member.
@@ -97,19 +85,23 @@ struct UpdateGuildMemberFields {
 ///
 /// [the discord docs]: https://discord.com/developers/docs/resources/guild#modify-guild-member
 pub struct UpdateGuildMember<'a> {
-    fields: UpdateGuildMemberFields,
-    fut: Option<Pending<'a, Bytes>>,
+    fields: UpdateGuildMemberFields<'a>,
     guild_id: GuildId,
     http: &'a Client,
     user_id: UserId,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 impl<'a> UpdateGuildMember<'a> {
-    pub(crate) fn new(http: &'a Client, guild_id: GuildId, user_id: UserId) -> Self {
+    pub(crate) const fn new(http: &'a Client, guild_id: GuildId, user_id: UserId) -> Self {
         Self {
-            fields: UpdateGuildMemberFields::default(),
-            fut: None,
+            fields: UpdateGuildMemberFields {
+                channel_id: None,
+                deaf: None,
+                mute: None,
+                nick: None,
+                roles: None,
+            },
             guild_id,
             http,
             user_id,
@@ -118,25 +110,22 @@ impl<'a> UpdateGuildMember<'a> {
     }
 
     /// Move the member to a different voice channel.
-    pub fn channel_id(mut self, channel_id: impl Into<Option<ChannelId>>) -> Self {
-        let channel_id = channel_id.into();
-        self.fields
-            .channel_id
-            .replace(NullableField::from_option(channel_id));
+    pub const fn channel_id(mut self, channel_id: Option<ChannelId>) -> Self {
+        self.fields.channel_id = Some(NullableField(channel_id));
 
         self
     }
 
     /// If true, restrict the member's ability to hear sound from a voice channel.
-    pub fn deaf(mut self, deaf: bool) -> Self {
-        self.fields.deaf.replace(deaf);
+    pub const fn deaf(mut self, deaf: bool) -> Self {
+        self.fields.deaf = Some(deaf);
 
         self
     }
 
     /// If true, restrict the member's ability to speak in a voice channel.
-    pub fn mute(mut self, mute: bool) -> Self {
-        self.fields.mute.replace(mute);
+    pub const fn mute(mut self, mute: bool) -> Self {
+        self.fields.mute = Some(mute);
 
         self
     }
@@ -149,34 +138,28 @@ impl<'a> UpdateGuildMember<'a> {
     ///
     /// Returns an [`UpdateGuildMemberErrorType::NicknameInvalid`] error type if
     /// the nickname length is too short or too long.
-    pub fn nick(self, nick: impl Into<Option<String>>) -> Result<Self, UpdateGuildMemberError> {
-        self._nick(nick.into())
-    }
-
-    fn _nick(mut self, nick: Option<String>) -> Result<Self, UpdateGuildMemberError> {
+    pub fn nick(mut self, nick: Option<&'a str>) -> Result<Self, UpdateGuildMemberError> {
         if let Some(nick) = nick {
-            if !validate::nickname(&nick) {
+            if !validate::nickname(nick) {
                 return Err(UpdateGuildMemberError {
-                    kind: UpdateGuildMemberErrorType::NicknameInvalid { nickname: nick },
+                    kind: UpdateGuildMemberErrorType::NicknameInvalid,
                 });
             }
-
-            self.fields.nick.replace(NullableField::Value(nick));
-        } else {
-            self.fields.nick.replace(NullableField::Null);
         }
+
+        self.fields.nick = Some(NullableField(nick));
 
         Ok(self)
     }
 
     /// Set the new list of roles for a member.
-    pub fn roles(mut self, roles: Vec<RoleId>) -> Self {
-        self.fields.roles.replace(roles);
+    pub const fn roles(mut self, roles: &'a [RoleId]) -> Self {
+        self.fields.roles = Some(roles);
 
         self
     }
 
-    fn request(&self) -> Result<Request, HttpError> {
+    fn request(&self) -> Result<Request<'a>, HttpError> {
         let mut request = Request::builder(Route::UpdateMember {
             guild_id: self.guild_id.0,
             user_id: self.user_id.0,
@@ -190,49 +173,27 @@ impl<'a> UpdateGuildMember<'a> {
         Ok(request.build())
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
-        let request = self.request()?;
-        self.fut.replace(Box::pin(self.http.request_bytes(request)));
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<MemberBody> {
+        let request = match self.request() {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
+        let mut future = self.http.request(request);
+        future.set_guild_id(self.guild_id);
+
+        future
     }
 }
 
-impl<'a> AuditLogReason for UpdateGuildMember<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for UpdateGuildMember<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
-    }
-}
-
-impl Future for UpdateGuildMember<'_> {
-    type Output = Result<Member, HttpError>;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        loop {
-            if let Some(fut) = self.as_mut().fut.as_mut() {
-                let bytes = match fut.as_mut().poll(cx) {
-                    Poll::Ready(Ok(bytes)) => bytes,
-                    Poll::Ready(Err(why)) => return Poll::Ready(Err(why)),
-                    Poll::Pending => return Poll::Pending,
-                };
-
-                let value = crate::json::from_bytes::<Value>(&bytes).map_err(HttpError::json)?;
-
-                let member_deserializer = MemberDeserializer::new(self.guild_id);
-                let member = member_deserializer
-                    .deserialize(value)
-                    .map_err(HttpError::json)?;
-
-                return Poll::Ready(Ok(member));
-            }
-
-            if let Err(why) = self.as_mut().start() {
-                return Poll::Ready(Err(why));
-            }
-        }
     }
 }
 
@@ -252,16 +213,18 @@ mod tests {
 
     #[test]
     fn test_request() -> Result<(), Box<dyn Error>> {
-        let client = Client::new("foo");
+        let client = Client::new("foo".to_owned());
         let builder = UpdateGuildMember::new(&client, GUILD_ID, USER_ID)
             .deaf(true)
             .mute(true);
         let actual = builder.request()?;
 
         let body = UpdateGuildMemberFields {
+            channel_id: None,
             deaf: Some(true),
             mute: Some(true),
-            ..UpdateGuildMemberFields::default()
+            nick: None,
+            roles: None,
         };
         let route = Route::UpdateMember {
             guild_id: GUILD_ID.0,
@@ -270,20 +233,23 @@ mod tests {
         let expected = Request::builder(route).json(&body)?.build();
 
         assert_eq!(actual.body, expected.body);
-        assert_eq!(actual.path, expected.path);
+        assert_eq!(actual.route, expected.route);
 
         Ok(())
     }
 
     #[test]
     fn test_nick_set_null() -> Result<(), Box<dyn Error>> {
-        let client = Client::new("foo");
+        let client = Client::new("foo".to_owned());
         let builder = UpdateGuildMember::new(&client, GUILD_ID, USER_ID).nick(None)?;
         let actual = builder.request()?;
 
         let body = UpdateGuildMemberFields {
-            nick: Some(NullableField::Null),
-            ..UpdateGuildMemberFields::default()
+            channel_id: None,
+            deaf: None,
+            mute: None,
+            nick: Some(NullableField(None)),
+            roles: None,
         };
         let route = Route::UpdateMember {
             guild_id: GUILD_ID.0,
@@ -298,14 +264,16 @@ mod tests {
 
     #[test]
     fn test_nick_set_value() -> Result<(), Box<dyn Error>> {
-        let client = Client::new("foo");
-        let builder =
-            UpdateGuildMember::new(&client, GUILD_ID, USER_ID).nick(Some("foo".to_owned()))?;
+        let client = Client::new("foo".to_owned());
+        let builder = UpdateGuildMember::new(&client, GUILD_ID, USER_ID).nick(Some("foo"))?;
         let actual = builder.request()?;
 
         let body = UpdateGuildMemberFields {
-            nick: Some(NullableField::Value("foo".to_owned())),
-            ..UpdateGuildMemberFields::default()
+            channel_id: None,
+            deaf: None,
+            mute: None,
+            nick: Some(NullableField(Some("foo"))),
+            roles: None,
         };
         let route = Route::UpdateMember {
             guild_id: GUILD_ID.0,

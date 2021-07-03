@@ -1,10 +1,11 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
     request::{
+        self,
         validate::{self, EmbedValidationError},
-        NullableField, Pending, Request,
+        NullableField, Request,
     },
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
@@ -47,12 +48,9 @@ impl UpdateMessageError {
         (self.kind, self.source)
     }
 
-    fn embed(source: EmbedValidationError, embed: Embed, idx: Option<usize>) -> Self {
+    fn embed(source: EmbedValidationError, idx: usize) -> Self {
         Self {
-            kind: UpdateMessageErrorType::EmbedTooLarge {
-                embed: Box::new(embed),
-                idx,
-            },
+            kind: UpdateMessageErrorType::EmbedTooLarge { idx },
             source: Some(Box::new(source)),
         }
     }
@@ -65,14 +63,10 @@ impl Display for UpdateMessageError {
                 f.write_str("the message content is invalid")
             }
             UpdateMessageErrorType::EmbedTooLarge { idx, .. } => {
-                if let Some(idx) = idx {
-                    f.write_str("the embed at index ")?;
-                    Display::fmt(&idx, f)?;
+                f.write_str("the embed at index ")?;
+                Display::fmt(idx, f)?;
 
-                    f.write_str("'s contents are too long")
-                } else {
-                    f.write_str("the embed's contents are too long")
-                }
+                f.write_str("'s contents are too long")
             }
         }
     }
@@ -91,38 +85,33 @@ impl Error for UpdateMessageError {
 #[non_exhaustive]
 pub enum UpdateMessageErrorType {
     /// Returned when the content is over 2000 UTF-16 characters.
-    ContentInvalid {
-        /// Provided content.
-        content: String,
-    },
+    ContentInvalid,
     /// Returned when the length of the embed is over 6000 characters.
     EmbedTooLarge {
-        /// Provided embed.
-        embed: Box<Embed>,
-        /// Index of the embed, if there is any.
-        idx: Option<usize>,
+        /// Index of the embed.
+        idx: usize,
     },
 }
 
-#[derive(Default, Serialize)]
-struct UpdateMessageFields {
+#[derive(Serialize)]
+struct UpdateMessageFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) allowed_mentions: Option<AllowedMentions>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub attachments: Vec<Attachment>,
+    #[serde(skip_serializing_if = "request::slice_is_empty")]
+    pub attachments: &'a [Attachment],
     // We don't serialize if this is Option::None, to avoid overwriting the
     // field without meaning to.
     //
     // So we use a nested Option, representing the following states:
     //
-    // - Some(Some(String)): Modifying the "content" from one state to a string;
+    // - Some(Some(str)): Modifying the "content" from one state to a string;
     // - Some(None): Removing the "content" by giving the Discord API a written
     //   `"content": null` in the JSON;
     // - None: Don't serialize the field at all, not modifying the state.
     #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<NullableField<String>>,
+    content: Option<NullableField<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    embeds: Option<Vec<Embed>>,
+    embeds: Option<&'a [Embed]>,
     #[serde(skip_serializing_if = "Option::is_none")]
     flags: Option<MessageFlags>,
 }
@@ -143,9 +132,10 @@ struct UpdateMessageFields {
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 /// client.update_message(ChannelId(1), MessageId(2))
-///     .content("test update".to_owned())?
+///     .content(Some("test update"))?
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
@@ -158,49 +148,49 @@ struct UpdateMessageFields {
 /// #
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// # let client = Client::new("my token");
+/// # let client = Client::new("my token".to_owned());
 /// client.update_message(ChannelId(1), MessageId(2))
 ///     .content(None)?
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
 pub struct UpdateMessage<'a> {
     channel_id: ChannelId,
-    fields: UpdateMessageFields,
-    fut: Option<Pending<'a, Message>>,
+    fields: UpdateMessageFields<'a>,
     http: &'a Client,
     message_id: MessageId,
 }
 
 impl<'a> UpdateMessage<'a> {
-    pub(crate) fn new(http: &'a Client, channel_id: ChannelId, message_id: MessageId) -> Self {
+    pub(crate) const fn new(
+        http: &'a Client,
+        channel_id: ChannelId,
+        message_id: MessageId,
+    ) -> Self {
         Self {
             channel_id,
-            fields: UpdateMessageFields::default(),
-            fut: None,
+            fields: UpdateMessageFields {
+                allowed_mentions: None,
+                attachments: &[],
+                content: None,
+                embeds: None,
+                flags: None,
+            },
             http,
             message_id,
         }
     }
 
-    /// Specify an attachment already present in the target message to keep.
+    /// Specify multiple attachments already present in the target message to
+    /// keep.
     ///
     /// If called, all unspecified attachments will be removed from the message.
     /// If not called, all attachments will be kept.
-    pub fn attachment(mut self, attachment: Attachment) -> Self {
-        self.fields.attachments.push(attachment);
-
-        self
-    }
-
-    /// Specify multiple attachments already present in the target message to keep.
     ///
-    /// If called, all unspecified attachments will be removed from the message.
-    /// If not called, all attachments will be kept.
-    pub fn attachments(mut self, attachments: impl IntoIterator<Item = Attachment>) -> Self {
-        self.fields
-            .attachments
-            .extend(attachments.into_iter().collect::<Vec<Attachment>>());
+    /// Calling this method will clear previous calls.
+    pub const fn attachments(mut self, attachments: &'a [Attachment]) -> Self {
+        self.fields.attachments = attachments;
 
         self
     }
@@ -218,64 +208,17 @@ impl<'a> UpdateMessage<'a> {
     ///
     /// Returns an [`UpdateMessageErrorType::ContentInvalid`] error type if the
     /// content length is too long.
-    pub fn content(self, content: impl Into<Option<String>>) -> Result<Self, UpdateMessageError> {
-        self._content(content.into())
-    }
-
-    fn _content(mut self, content: Option<String>) -> Result<Self, UpdateMessageError> {
+    pub fn content(mut self, content: Option<&'a str>) -> Result<Self, UpdateMessageError> {
         if let Some(content_ref) = content.as_ref() {
             if !validate::content_limit(content_ref) {
                 return Err(UpdateMessageError {
-                    kind: UpdateMessageErrorType::ContentInvalid {
-                        content: content.expect("content is known to be some"),
-                    },
+                    kind: UpdateMessageErrorType::ContentInvalid,
                     source: None,
                 });
             }
         }
 
-        self.fields
-            .content
-            .replace(NullableField::from_option(content));
-
-        Ok(self)
-    }
-
-    /// Attach an embed to the message.
-    ///
-    /// Pass `None` if you want to remove all of the embeds.
-    ///
-    /// The first call of this method will clear all present embeds from a
-    /// message and replace it with the set embed. Subsequent calls will add
-    /// more embeds.
-    ///
-    /// To pass multiple embeds at once, use [`embeds`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an [`UpdateMessageErrorType::EmbedTooLarge`] error type if the
-    /// embed is too large.
-    ///
-    /// [`embeds`]: Self::embeds
-    pub fn embed(self, embed: impl Into<Option<Embed>>) -> Result<Self, UpdateMessageError> {
-        self._embed(embed.into())
-    }
-
-    fn _embed(mut self, embed: Option<Embed>) -> Result<Self, UpdateMessageError> {
-        if let Some(embed_ref) = embed.as_ref() {
-            validate::embed(&embed_ref)
-                .map_err(|source| UpdateMessageError::embed(source, embed_ref.clone(), None))?;
-        }
-
-        if let Some(embed) = embed {
-            if let Some(embeds) = &mut self.fields.embeds {
-                embeds.push(embed);
-            } else {
-                self.fields.embeds.replace(Vec::from([embed]));
-            }
-        } else {
-            self.fields.embeds.replace(Vec::new());
-        }
+        self.fields.content = Some(NullableField(content));
 
         Ok(self)
     }
@@ -294,38 +237,38 @@ impl<'a> UpdateMessage<'a> {
     /// Note that if there is no content or file then you will not be able to
     /// remove all of the embeds.
     ///
+    /// Calling this method again will clear previous calls.
+    ///
     /// # Errors
     ///
     /// Returns an [`UpdateMessageErrorType::EmbedTooLarge`] error type if an
     /// embed is too large.
-    pub fn embeds(
-        mut self,
-        embeds: impl IntoIterator<Item = Embed>,
-    ) -> Result<Self, UpdateMessageError> {
-        for (idx, embed) in embeds.into_iter().enumerate() {
-            validate::embed(&embed)
-                .map_err(|source| UpdateMessageError::embed(source, embed.clone(), Some(idx)))?;
-
-            if let Some(embeds) = &mut self.fields.embeds {
-                embeds.push(embed);
-            } else {
-                self.fields.embeds.replace(Vec::from([embed]));
-            }
+    pub fn embeds(mut self, embeds: &'a [Embed]) -> Result<Self, UpdateMessageError> {
+        for (idx, embed) in embeds.iter().enumerate() {
+            validate::embed(embed).map_err(|source| UpdateMessageError::embed(source, idx))?;
         }
+
+        self.fields.embeds = Some(embeds);
 
         Ok(self)
     }
 
     /// Suppress the embeds in the message.
-    pub fn suppress_embeds(mut self, suppress: bool) -> Self {
-        let mut flags = self.fields.flags.unwrap_or_else(MessageFlags::empty);
+    pub const fn suppress_embeds(mut self, suppress: bool) -> Self {
+        #[allow(clippy::option_if_let_else)]
+        let mut bits = if let Some(flags) = self.fields.flags {
+            flags.bits()
+        } else {
+            0
+        };
 
         if suppress {
-            flags |= MessageFlags::SUPPRESS_EMBEDS;
+            bits |= MessageFlags::SUPPRESS_EMBEDS.bits();
         } else {
-            flags &= !MessageFlags::SUPPRESS_EMBEDS;
+            bits &= !MessageFlags::SUPPRESS_EMBEDS.bits()
         }
-        self.fields.flags.replace(flags);
+
+        self.fields.flags = Some(MessageFlags::from_bits_truncate(bits));
 
         self
     }
@@ -337,18 +280,20 @@ impl<'a> UpdateMessage<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
-        let request = Request::builder(Route::UpdateMessage {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Message> {
+        let mut request = Request::builder(Route::UpdateMessage {
             channel_id: self.channel_id.0,
             message_id: self.message_id.0,
-        })
-        .json(&self.fields)?
-        .build();
+        });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(UpdateMessage<'_>, Message);

@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, Pending, Request},
+    request::{validate, Request},
+    response::{marker::ListBody, ResponseFuture},
     routing::Route,
 };
 use std::{
@@ -62,10 +62,7 @@ impl Error for GetChannelMessagesConfiguredError {}
 #[non_exhaustive]
 pub enum GetChannelMessagesConfiguredErrorType {
     /// The maximum number of messages to retrieve is either 0 or more than 100.
-    LimitInvalid {
-        /// Provided maximum number of messages to retrieve.
-        limit: u64,
-    },
+    LimitInvalid,
 }
 
 struct GetChannelMessagesConfiguredFields {
@@ -85,12 +82,11 @@ pub struct GetChannelMessagesConfigured<'a> {
     before: Option<MessageId>,
     channel_id: ChannelId,
     fields: GetChannelMessagesConfiguredFields,
-    fut: Option<Pending<'a, Vec<Message>>>,
     http: &'a Client,
 }
 
 impl<'a> GetChannelMessagesConfigured<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         http: &'a Client,
         channel_id: ChannelId,
         after: Option<MessageId>,
@@ -104,7 +100,6 @@ impl<'a> GetChannelMessagesConfigured<'a> {
             before,
             channel_id,
             fields: GetChannelMessagesConfiguredFields { limit },
-            fut: None,
             http,
         }
     }
@@ -117,19 +112,22 @@ impl<'a> GetChannelMessagesConfigured<'a> {
     ///
     /// Returns a [`GetChannelMessagesConfiguredErrorType::LimitInvalid`] error
     /// type if the amount is greater than 21600.
-    pub fn limit(mut self, limit: u64) -> Result<Self, GetChannelMessagesConfiguredError> {
+    pub const fn limit(mut self, limit: u64) -> Result<Self, GetChannelMessagesConfiguredError> {
         if !validate::get_channel_messages_limit(limit) {
             return Err(GetChannelMessagesConfiguredError {
-                kind: GetChannelMessagesConfiguredErrorType::LimitInvalid { limit },
+                kind: GetChannelMessagesConfiguredErrorType::LimitInvalid,
             });
         }
 
-        self.fields.limit.replace(limit);
+        self.fields.limit = Some(limit);
 
         Ok(self)
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<ListBody<Message>> {
         let request = Request::from_route(Route::GetMessages {
             after: self.after.map(|x| x.0),
             around: self.around.map(|x| x.0),
@@ -138,10 +136,6 @@ impl<'a> GetChannelMessagesConfigured<'a> {
             limit: self.fields.limit,
         });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(GetChannelMessagesConfigured<'_>, Vec<Message>);

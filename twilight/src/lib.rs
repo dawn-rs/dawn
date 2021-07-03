@@ -140,7 +140,7 @@
 //!     let scheme = ShardScheme::Auto;
 //!
 //!     // Use intents to only receive guild message events.
-//!     let (cluster, mut events) = Cluster::builder(&token, Intents::GUILD_MESSAGES)
+//!     let (cluster, mut events) = Cluster::builder(token.to_owned(), Intents::GUILD_MESSAGES)
 //!         .shard_scheme(scheme)
 //!         .build()
 //!         .await?;
@@ -154,7 +154,7 @@
 //!     });
 //!
 //!     // HTTP is separate from the gateway, so create a new client.
-//!     let http = HttpClient::new(&token);
+//!     let http = HttpClient::new(token);
 //!
 //!     // Since we only care about new messages, make the cache only
 //!     // cache new messages.
@@ -180,7 +180,10 @@
 //! ) -> Result<(), Box<dyn Error + Send + Sync>> {
 //!     match event {
 //!         Event::MessageCreate(msg) if msg.content == "!ping" => {
-//!             http.create_message(msg.channel_id).content("Pong!")?.await?;
+//!             http.create_message(msg.channel_id)
+//!                 .content("Pong!")?
+//!                 .exec()
+//!                 .await?;
 //!         }
 //!         Event::ShardConnected(_) => {
 //!             println!("Connected on shard {}", shard_id);

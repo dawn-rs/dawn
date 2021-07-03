@@ -1,36 +1,37 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{NullableField, Pending, Request},
+    request::{NullableField, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
 use twilight_model::{channel::Webhook, id::WebhookId};
 
-#[derive(Default, Serialize)]
-struct UpdateWebhookWithTokenFields {
+#[derive(Serialize)]
+struct UpdateWebhookWithTokenFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
-    avatar: Option<NullableField<String>>,
+    avatar: Option<NullableField<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<NullableField<String>>,
+    name: Option<NullableField<&'a str>>,
 }
 
 /// Update a webhook, with a token, by ID.
 pub struct UpdateWebhookWithToken<'a> {
-    fields: UpdateWebhookWithTokenFields,
-    fut: Option<Pending<'a, Webhook>>,
+    fields: UpdateWebhookWithTokenFields<'a>,
     http: &'a Client,
-    token: String,
+    token: &'a str,
     webhook_id: WebhookId,
 }
 
 impl<'a> UpdateWebhookWithToken<'a> {
-    pub(crate) fn new(http: &'a Client, webhook_id: WebhookId, token: impl Into<String>) -> Self {
+    pub(crate) const fn new(http: &'a Client, webhook_id: WebhookId, token: &'a str) -> Self {
         Self {
-            fields: UpdateWebhookWithTokenFields::default(),
-            fut: None,
+            fields: UpdateWebhookWithTokenFields {
+                avatar: None,
+                name: None,
+            },
             http,
-            token: token.into(),
+            token,
             webhook_id,
         }
     }
@@ -42,36 +43,34 @@ impl<'a> UpdateWebhookWithToken<'a> {
     /// base64-encoded image.
     ///
     /// [Discord Docs/Image Data]: https://discord.com/developers/docs/reference#image-data
-    pub fn avatar(mut self, avatar: impl Into<Option<String>>) -> Self {
-        self.fields
-            .avatar
-            .replace(NullableField::from_option(avatar.into()));
+    pub const fn avatar(mut self, avatar: Option<&'a str>) -> Self {
+        self.fields.avatar = Some(NullableField(avatar));
 
         self
     }
 
     /// Change the name of the webhook.
-    pub fn name(mut self, name: impl Into<Option<String>>) -> Self {
-        self.fields
-            .name
-            .replace(NullableField::from_option(name.into()));
+    pub const fn name(mut self, name: Option<&'a str>) -> Self {
+        self.fields.name = Some(NullableField(name));
 
         self
     }
 
-    fn start(&mut self) -> Result<(), Error> {
-        let request = Request::builder(Route::UpdateWebhook {
-            token: Some(self.token.clone()),
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Webhook> {
+        let mut request = Request::builder(Route::UpdateWebhook {
+            token: Some(self.token),
             webhook_id: self.webhook_id.0,
         })
-        .json(&self.fields)?
-        .use_authorization_token(false)
-        .build();
+        .use_authorization_token(false);
 
-        self.fut.replace(Box::pin(self.http.request(request)));
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(UpdateWebhookWithToken<'_>, Webhook);
