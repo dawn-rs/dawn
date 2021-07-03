@@ -64,7 +64,7 @@ pub enum UpdateGuildMemberErrorType {
     NicknameInvalid,
 }
 
-#[derive(Default, Serialize)]
+#[derive(Serialize)]
 struct UpdateGuildMemberFields<'a> {
     #[allow(clippy::option_option)]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -93,9 +93,15 @@ pub struct UpdateGuildMember<'a> {
 }
 
 impl<'a> UpdateGuildMember<'a> {
-    pub(crate) fn new(http: &'a Client, guild_id: GuildId, user_id: UserId) -> Self {
+    pub(crate) const fn new(http: &'a Client, guild_id: GuildId, user_id: UserId) -> Self {
         Self {
-            fields: UpdateGuildMemberFields::default(),
+            fields: UpdateGuildMemberFields {
+                channel_id: None,
+                deaf: None,
+                mute: None,
+                nick: None,
+                roles: None,
+            },
             guild_id,
             http,
             user_id,
@@ -104,24 +110,22 @@ impl<'a> UpdateGuildMember<'a> {
     }
 
     /// Move the member to a different voice channel.
-    pub fn channel_id(mut self, channel_id: Option<ChannelId>) -> Self {
-        self.fields
-            .channel_id
-            .replace(NullableField::from_option(channel_id));
+    pub const fn channel_id(mut self, channel_id: Option<ChannelId>) -> Self {
+        self.fields.channel_id = Some(NullableField(channel_id));
 
         self
     }
 
     /// If true, restrict the member's ability to hear sound from a voice channel.
-    pub fn deaf(mut self, deaf: bool) -> Self {
-        self.fields.deaf.replace(deaf);
+    pub const fn deaf(mut self, deaf: bool) -> Self {
+        self.fields.deaf = Some(deaf);
 
         self
     }
 
     /// If true, restrict the member's ability to speak in a voice channel.
-    pub fn mute(mut self, mute: bool) -> Self {
-        self.fields.mute.replace(mute);
+    pub const fn mute(mut self, mute: bool) -> Self {
+        self.fields.mute = Some(mute);
 
         self
     }
@@ -141,18 +145,16 @@ impl<'a> UpdateGuildMember<'a> {
                     kind: UpdateGuildMemberErrorType::NicknameInvalid,
                 });
             }
-
-            self.fields.nick.replace(NullableField::Value(nick));
-        } else {
-            self.fields.nick.replace(NullableField::Null);
         }
+
+        self.fields.nick = Some(NullableField(nick));
 
         Ok(self)
     }
 
     /// Set the new list of roles for a member.
-    pub fn roles(mut self, roles: &'a [RoleId]) -> Self {
-        self.fields.roles.replace(roles);
+    pub const fn roles(mut self, roles: &'a [RoleId]) -> Self {
+        self.fields.roles = Some(roles);
 
         self
     }
@@ -218,9 +220,11 @@ mod tests {
         let actual = builder.request()?;
 
         let body = UpdateGuildMemberFields {
+            channel_id: None,
             deaf: Some(true),
             mute: Some(true),
-            ..UpdateGuildMemberFields::default()
+            nick: None,
+            roles: None,
         };
         let route = Route::UpdateMember {
             guild_id: GUILD_ID.0,
@@ -241,8 +245,11 @@ mod tests {
         let actual = builder.request()?;
 
         let body = UpdateGuildMemberFields {
-            nick: Some(NullableField::Null),
-            ..UpdateGuildMemberFields::default()
+            channel_id: None,
+            deaf: None,
+            mute: None,
+            nick: Some(NullableField(None)),
+            roles: None,
         };
         let route = Route::UpdateMember {
             guild_id: GUILD_ID.0,
@@ -262,8 +269,11 @@ mod tests {
         let actual = builder.request()?;
 
         let body = UpdateGuildMemberFields {
-            nick: Some(NullableField::Value("foo")),
-            ..UpdateGuildMemberFields::default()
+            channel_id: None,
+            deaf: None,
+            mute: None,
+            nick: Some(NullableField(Some("foo"))),
+            roles: None,
         };
         let route = Route::UpdateMember {
             guild_id: GUILD_ID.0,

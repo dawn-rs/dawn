@@ -63,7 +63,7 @@ pub enum UpdateGuildErrorType {
     NameInvalid,
 }
 
-#[derive(Default, Serialize)]
+#[derive(Serialize)]
 struct UpdateGuildFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     afk_channel_id: Option<NullableField<ChannelId>>,
@@ -114,9 +114,27 @@ pub struct UpdateGuild<'a> {
 }
 
 impl<'a> UpdateGuild<'a> {
-    pub(crate) fn new(http: &'a Client, guild_id: GuildId) -> Self {
+    pub(crate) const fn new(http: &'a Client, guild_id: GuildId) -> Self {
         Self {
-            fields: UpdateGuildFields::default(),
+            fields: UpdateGuildFields {
+                afk_channel_id: None,
+                afk_timeout: None,
+                banner: None,
+                default_message_notifications: None,
+                discovery_splash: None,
+                explicit_content_filter: None,
+                features: None,
+                icon: None,
+                name: None,
+                owner_id: None,
+                splash: None,
+                system_channel_id: None,
+                system_channel_flags: None,
+                verification_level: None,
+                rules_channel_id: None,
+                public_updates_channel_id: None,
+                preferred_locale: None,
+            },
             guild_id,
             http,
             reason: None,
@@ -124,17 +142,15 @@ impl<'a> UpdateGuild<'a> {
     }
 
     /// Set the voice channel where AFK voice users are sent.
-    pub fn afk_channel_id(mut self, afk_channel_id: Option<ChannelId>) -> Self {
-        self.fields
-            .afk_channel_id
-            .replace(NullableField::from_option(afk_channel_id));
+    pub const fn afk_channel_id(mut self, afk_channel_id: Option<ChannelId>) -> Self {
+        self.fields.afk_channel_id = Some(NullableField(afk_channel_id));
 
         self
     }
 
     /// Set how much time it takes for a voice user to be considered AFK.
-    pub fn afk_timeout(mut self, afk_timeout: u64) -> Self {
-        self.fields.afk_timeout.replace(afk_timeout);
+    pub const fn afk_timeout(mut self, afk_timeout: u64) -> Self {
+        self.fields.afk_timeout = Some(afk_timeout);
 
         self
     }
@@ -145,10 +161,8 @@ impl<'a> UpdateGuild<'a> {
     /// the banner.
     ///
     /// The server must have the `BANNER` feature.
-    pub fn banner(mut self, banner: Option<&'a str>) -> Self {
-        self.fields
-            .banner
-            .replace(NullableField::from_option(banner));
+    pub const fn banner(mut self, banner: Option<&'a str>) -> Self {
+        self.fields.banner = Some(NullableField(banner));
 
         self
     }
@@ -157,13 +171,12 @@ impl<'a> UpdateGuild<'a> {
     /// information.
     ///
     /// [the discord docs]: https://discord.com/developers/docs/resources/guild#create-guild
-    pub fn default_message_notifications(
+    pub const fn default_message_notifications(
         mut self,
         default_message_notifications: Option<DefaultMessageNotificationLevel>,
     ) -> Self {
-        self.fields
-            .default_message_notifications
-            .replace(NullableField::from_option(default_message_notifications));
+        self.fields.default_message_notifications =
+            Some(NullableField(default_message_notifications));
 
         self
     }
@@ -171,29 +184,25 @@ impl<'a> UpdateGuild<'a> {
     /// Set the guild's discovery splash image.
     ///
     /// Requires the guild to have the `DISCOVERABLE` feature enabled.
-    pub fn discovery_splash(mut self, discovery_splash: Option<&'a str>) -> Self {
-        self.fields
-            .discovery_splash
-            .replace(NullableField::from_option(discovery_splash));
+    pub const fn discovery_splash(mut self, discovery_splash: Option<&'a str>) -> Self {
+        self.fields.discovery_splash = Some(NullableField(discovery_splash));
 
         self
     }
 
     /// Set the explicit content filter level.
-    pub fn explicit_content_filter(
+    pub const fn explicit_content_filter(
         mut self,
         explicit_content_filter: Option<ExplicitContentFilter>,
     ) -> Self {
-        self.fields
-            .explicit_content_filter
-            .replace(NullableField::from_option(explicit_content_filter));
+        self.fields.explicit_content_filter = Some(NullableField(explicit_content_filter));
 
         self
     }
 
     /// Set the enabled features of the guild.
-    pub fn features(mut self, features: &'a [&'a str]) -> Self {
-        self.fields.features.replace(features);
+    pub const fn features(mut self, features: &'a [&'a str]) -> Self {
+        self.fields.features = Some(features);
 
         self
     }
@@ -205,8 +214,8 @@ impl<'a> UpdateGuild<'a> {
     /// for more information.
     ///
     /// [the discord docs]: https://discord.com/developers/docs/reference#image-data
-    pub fn icon(mut self, icon: Option<&'a str>) -> Self {
-        self.fields.icon.replace(NullableField::from_option(icon));
+    pub const fn icon(mut self, icon: Option<&'a str>) -> Self {
+        self.fields.icon = Some(NullableField(icon));
 
         self
     }
@@ -235,8 +244,8 @@ impl<'a> UpdateGuild<'a> {
     /// Transfer ownership to another user.
     ///
     /// Only works if the current user is the owner.
-    pub fn owner_id(mut self, owner_id: UserId) -> Self {
-        self.fields.owner_id.replace(owner_id);
+    pub const fn owner_id(mut self, owner_id: UserId) -> Self {
+        self.fields.owner_id = Some(owner_id);
 
         self
     }
@@ -244,31 +253,25 @@ impl<'a> UpdateGuild<'a> {
     /// Set the guild's splash image.
     ///
     /// Requires the guild to have the `INVITE_SPLASH` feature enabled.
-    pub fn splash(mut self, splash: Option<&'a str>) -> Self {
-        self.fields
-            .splash
-            .replace(NullableField::from_option(splash));
+    pub const fn splash(mut self, splash: Option<&'a str>) -> Self {
+        self.fields.splash = Some(NullableField(splash));
 
         self
     }
 
     /// Set the channel where events such as welcome messages are posted.
-    pub fn system_channel(mut self, system_channel_id: Option<ChannelId>) -> Self {
-        self.fields
-            .system_channel_id
-            .replace(NullableField::from_option(system_channel_id));
+    pub const fn system_channel(mut self, system_channel_id: Option<ChannelId>) -> Self {
+        self.fields.system_channel_id = Some(NullableField(system_channel_id));
 
         self
     }
 
     /// Set the guild's [`SystemChannelFlags`].
-    pub fn system_channel_flags(
+    pub const fn system_channel_flags(
         mut self,
         system_channel_flags: Option<SystemChannelFlags>,
     ) -> Self {
-        self.fields
-            .system_channel_flags
-            .replace(NullableField::from_option(system_channel_flags));
+        self.fields.system_channel_flags = Some(NullableField(system_channel_flags));
 
         self
     }
@@ -278,10 +281,8 @@ impl<'a> UpdateGuild<'a> {
     /// Requires the guild to be `PUBLIC`. Refer to [the discord docs] for more information.
     ///
     /// [the discord docs]: https://discord.com/developers/docs/resources/guild#modify-guild
-    pub fn rules_channel(mut self, rules_channel_id: Option<ChannelId>) -> Self {
-        self.fields
-            .rules_channel_id
-            .replace(NullableField::from_option(rules_channel_id));
+    pub const fn rules_channel(mut self, rules_channel_id: Option<ChannelId>) -> Self {
+        self.fields.rules_channel_id = Some(NullableField(rules_channel_id));
 
         self
     }
@@ -289,10 +290,11 @@ impl<'a> UpdateGuild<'a> {
     /// Set the public updates channel.
     ///
     /// Requires the guild to be `PUBLIC`.
-    pub fn public_updates_channel(mut self, public_updates_channel_id: Option<ChannelId>) -> Self {
-        self.fields
-            .public_updates_channel_id
-            .replace(NullableField::from_option(public_updates_channel_id));
+    pub const fn public_updates_channel(
+        mut self,
+        public_updates_channel_id: Option<ChannelId>,
+    ) -> Self {
+        self.fields.public_updates_channel_id = Some(NullableField(public_updates_channel_id));
 
         self
     }
@@ -300,10 +302,8 @@ impl<'a> UpdateGuild<'a> {
     /// Set the preferred locale for the guild.
     ///
     /// Defaults to `en-US`. Requires the guild to be `PUBLIC`.
-    pub fn preferred_locale(mut self, preferred_locale: Option<&'a str>) -> Self {
-        self.fields
-            .preferred_locale
-            .replace(NullableField::from_option(preferred_locale));
+    pub const fn preferred_locale(mut self, preferred_locale: Option<&'a str>) -> Self {
+        self.fields.preferred_locale = Some(NullableField(preferred_locale));
 
         self
     }
@@ -311,10 +311,11 @@ impl<'a> UpdateGuild<'a> {
     /// Set the verification level. Refer to [the discord docs] for more information.
     ///
     /// [the discord docs]: https://discord.com/developers/docs/resources/guild#guild-object-verification-level
-    pub fn verification_level(mut self, verification_level: Option<VerificationLevel>) -> Self {
-        self.fields
-            .verification_level
-            .replace(NullableField::from_option(verification_level));
+    pub const fn verification_level(
+        mut self,
+        verification_level: Option<VerificationLevel>,
+    ) -> Self {
+        self.fields.verification_level = Some(NullableField(verification_level));
 
         self
     }

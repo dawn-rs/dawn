@@ -110,10 +110,10 @@ pub struct GetChannelMessages<'a> {
 }
 
 impl<'a> GetChannelMessages<'a> {
-    pub(crate) fn new(http: &'a Client, channel_id: ChannelId) -> Self {
+    pub(crate) const fn new(http: &'a Client, channel_id: ChannelId) -> Self {
         Self {
             channel_id,
-            fields: GetChannelMessagesFields::default(),
+            fields: GetChannelMessagesFields { limit: None },
             http,
         }
     }
@@ -159,14 +159,14 @@ impl<'a> GetChannelMessages<'a> {
     ///
     /// Returns a [`GetChannelMessagesErrorType::LimitInvalid`] error type if
     /// the amount is less than 1 or greater than 100.
-    pub fn limit(mut self, limit: u64) -> Result<Self, GetChannelMessagesError> {
+    pub const fn limit(mut self, limit: u64) -> Result<Self, GetChannelMessagesError> {
         if !validate::get_channel_messages_limit(limit) {
             return Err(GetChannelMessagesError {
                 kind: GetChannelMessagesErrorType::LimitInvalid,
             });
         }
 
-        self.fields.limit.replace(limit);
+        self.fields.limit = Some(limit);
 
         Ok(self)
     }

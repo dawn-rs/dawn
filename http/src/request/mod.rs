@@ -66,31 +66,16 @@ impl Method {
 /// This is particularly useful when combined with an `Option` by allowing three
 /// states via `Option<NullableField<T>>`: undefined, null, and T.
 ///
-/// When undefined a field can skip serialization, while if it's null then it will
-/// serialize as null. This mechanism is primarily used in patch requests.
-enum NullableField<T> {
-    /// Remove a value.
-    Null,
-    /// Set a value.
-    Value(T),
-}
-
-impl<T> NullableField<T> {
-    /// Create a `NullableField` from an option.
-    #[allow(clippy::missing_const_for_fn)]
-    fn from_option(option: Option<T>) -> Self {
-        match option {
-            Some(value) => Self::Value(value),
-            None => Self::Null,
-        }
-    }
-}
+/// When the request field is `None` a field can skip serialization, while if a
+/// `NullableField` is provided with `None` within it then it will serialize as
+/// null. This mechanism is primarily used in patch requests.
+struct NullableField<T>(Option<T>);
 
 impl<T: Serialize> Serialize for NullableField<T> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        match self {
-            Self::Null => serializer.serialize_none(),
-            Self::Value(inner) => serializer.serialize_some(inner),
+        match self.0.as_ref() {
+            Some(inner) => serializer.serialize_some(inner),
+            None => serializer.serialize_none(),
         }
     }
 }

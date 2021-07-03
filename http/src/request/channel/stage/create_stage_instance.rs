@@ -65,7 +65,7 @@ pub enum CreateStageInstanceErrorType {
     InvalidTopic,
 }
 
-#[derive(Default, Serialize)]
+#[derive(Serialize)]
 struct CreateStageInstanceFields<'a> {
     channel_id: ChannelId,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -97,16 +97,16 @@ impl<'a> CreateStageInstance<'a> {
         Ok(Self {
             fields: CreateStageInstanceFields {
                 channel_id,
+                privacy_level: None,
                 topic,
-                ..CreateStageInstanceFields::default()
             },
             http,
         })
     }
 
     /// Set the [`PrivacyLevel`] of the instance.
-    pub fn privacy_level(mut self, privacy_level: PrivacyLevel) -> Self {
-        self.fields.privacy_level.replace(privacy_level);
+    pub const fn privacy_level(mut self, privacy_level: PrivacyLevel) -> Self {
+        self.fields.privacy_level = Some(privacy_level);
 
         self
     }

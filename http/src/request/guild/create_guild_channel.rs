@@ -141,42 +141,40 @@ impl<'a> CreateGuildChannel<'a> {
     }
 
     /// Set the bitrate of the channel. Applicable to voice channels only.
-    pub fn bitrate(mut self, bitrate: u64) -> Self {
-        self.fields.bitrate.replace(bitrate);
+    pub const fn bitrate(mut self, bitrate: u64) -> Self {
+        self.fields.bitrate = Some(bitrate);
 
         self
     }
 
     /// Set the kind of channel.
-    pub fn kind(mut self, kind: ChannelType) -> Self {
-        self.fields.kind.replace(kind);
+    pub const fn kind(mut self, kind: ChannelType) -> Self {
+        self.fields.kind = Some(kind);
 
         self
     }
 
     /// Set whether the channel is marked as NSFW.
-    pub fn nsfw(mut self, nsfw: bool) -> Self {
-        self.fields.nsfw.replace(nsfw);
+    pub const fn nsfw(mut self, nsfw: bool) -> Self {
+        self.fields.nsfw = Some(nsfw);
 
         self
     }
 
     /// If this is specified, and the parent ID is a `ChannelType::CategoryChannel`, create this
     /// channel as a child of the category channel.
-    pub fn parent_id(mut self, parent_id: ChannelId) -> Self {
-        self.fields.parent_id.replace(parent_id);
+    pub const fn parent_id(mut self, parent_id: ChannelId) -> Self {
+        self.fields.parent_id = Some(parent_id);
 
         self
     }
 
     /// Set the permission overwrites of a channel.
-    pub fn permission_overwrites(
+    pub const fn permission_overwrites(
         mut self,
         permission_overwrites: &'a [PermissionOverwrite],
     ) -> Self {
-        self.fields
-            .permission_overwrites
-            .replace(permission_overwrites);
+        self.fields.permission_overwrites = Some(permission_overwrites);
 
         self
     }
@@ -185,8 +183,8 @@ impl<'a> CreateGuildChannel<'a> {
     ///
     /// Positions are numerical and zero-indexed. If you place a channel at position 2, channels
     /// 2-n will shift down one position and the initial channel will take its place.
-    pub fn position(mut self, position: u64) -> Self {
-        self.fields.position.replace(position);
+    pub const fn position(mut self, position: u64) -> Self {
+        self.fields.position = Some(position);
 
         self
     }
@@ -203,7 +201,7 @@ impl<'a> CreateGuildChannel<'a> {
     /// type if the amount is greater than 21600.
     ///
     /// [the discord docs]: https://discordapp.com/developers/docs/resources/channel#channel-object-channel-structure
-    pub fn rate_limit_per_user(
+    pub const fn rate_limit_per_user(
         mut self,
         rate_limit_per_user: u64,
     ) -> Result<Self, CreateGuildChannelError> {
@@ -213,7 +211,7 @@ impl<'a> CreateGuildChannel<'a> {
             });
         }
 
-        self.fields.rate_limit_per_user.replace(rate_limit_per_user);
+        self.fields.rate_limit_per_user = Some(rate_limit_per_user);
 
         Ok(self)
     }
@@ -246,8 +244,8 @@ impl<'a> CreateGuildChannel<'a> {
     /// discord docs] for more details.
     ///
     /// [the discord docs]: https://discord.com/developers/docs/resources/channel#modify-channel-json-params
-    pub fn user_limit(mut self, user_limit: u64) -> Self {
-        self.fields.user_limit.replace(user_limit);
+    pub const fn user_limit(mut self, user_limit: u64) -> Self {
+        self.fields.user_limit = Some(user_limit);
 
         self
     }

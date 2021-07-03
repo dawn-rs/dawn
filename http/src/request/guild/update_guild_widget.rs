@@ -10,7 +10,7 @@ use twilight_model::{
     id::{ChannelId, GuildId},
 };
 
-#[derive(Default, Serialize)]
+#[derive(Serialize)]
 struct UpdateGuildWidgetFields {
     #[serde(skip_serializing_if = "Option::is_none")]
     channel_id: Option<NullableField<ChannelId>>,
@@ -26,26 +26,27 @@ pub struct UpdateGuildWidget<'a> {
 }
 
 impl<'a> UpdateGuildWidget<'a> {
-    pub(crate) fn new(http: &'a Client, guild_id: GuildId) -> Self {
+    pub(crate) const fn new(http: &'a Client, guild_id: GuildId) -> Self {
         Self {
-            fields: UpdateGuildWidgetFields::default(),
+            fields: UpdateGuildWidgetFields {
+                channel_id: None,
+                enabled: None,
+            },
             guild_id,
             http,
         }
     }
 
     /// Set which channel to display on the widget.
-    pub fn channel_id(mut self, channel_id: Option<ChannelId>) -> Self {
-        self.fields
-            .channel_id
-            .replace(NullableField::from_option(channel_id));
+    pub const fn channel_id(mut self, channel_id: Option<ChannelId>) -> Self {
+        self.fields.channel_id = Some(NullableField(channel_id));
 
         self
     }
 
     /// Set to true to enable the guild widget.
-    pub fn enabled(mut self, enabled: bool) -> Self {
-        self.fields.enabled.replace(enabled);
+    pub const fn enabled(mut self, enabled: bool) -> Self {
+        self.fields.enabled = Some(enabled);
 
         self
     }

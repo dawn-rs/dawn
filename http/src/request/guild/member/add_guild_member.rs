@@ -113,15 +113,15 @@ impl<'a> AddGuildMember<'a> {
 
     /// Whether the new member will be unable to hear audio when connected to a
     /// voice channel.
-    pub fn deaf(mut self, deaf: bool) -> Self {
-        self.fields.deaf.replace(deaf);
+    pub const fn deaf(mut self, deaf: bool) -> Self {
+        self.fields.deaf = Some(deaf);
 
         self
     }
 
     /// Whether the new member will be unable to speak in voice channels.
-    pub fn mute(mut self, mute: bool) -> Self {
-        self.fields.mute.replace(mute);
+    pub const fn mute(mut self, mute: bool) -> Self {
+        self.fields.mute = Some(mute);
 
         self
     }
@@ -148,8 +148,8 @@ impl<'a> AddGuildMember<'a> {
     }
 
     /// List of roles to assign the new member.
-    pub fn roles(mut self, roles: &'a [RoleId]) -> Self {
-        self.fields.roles.replace(roles);
+    pub const fn roles(mut self, roles: &'a [RoleId]) -> Self {
+        self.fields.roles = Some(roles);
 
         self
     }

@@ -63,7 +63,6 @@ pub enum GetGuildMembersErrorType {
     },
 }
 
-#[derive(Default)]
 struct GetGuildMembersFields {
     after: Option<UserId>,
     limit: Option<u64>,
@@ -99,17 +98,21 @@ pub struct GetGuildMembers<'a> {
 }
 
 impl<'a> GetGuildMembers<'a> {
-    pub(crate) fn new(http: &'a Client, guild_id: GuildId) -> Self {
+    pub(crate) const fn new(http: &'a Client, guild_id: GuildId) -> Self {
         Self {
-            fields: GetGuildMembersFields::default(),
+            fields: GetGuildMembersFields {
+                after: None,
+                limit: None,
+                presences: None,
+            },
             guild_id,
             http,
         }
     }
 
     /// Sets the user ID to get members after.
-    pub fn after(mut self, after: UserId) -> Self {
-        self.fields.after.replace(after);
+    pub const fn after(mut self, after: UserId) -> Self {
+        self.fields.after = Some(after);
 
         self
     }
@@ -122,21 +125,21 @@ impl<'a> GetGuildMembers<'a> {
     ///
     /// Returns a [`GetGuildMembersErrorType::LimitInvalid`] error type if the
     /// limit is 0 or greater than 1000.
-    pub fn limit(mut self, limit: u64) -> Result<Self, GetGuildMembersError> {
+    pub const fn limit(mut self, limit: u64) -> Result<Self, GetGuildMembersError> {
         if !validate::get_guild_members_limit(limit) {
             return Err(GetGuildMembersError {
                 kind: GetGuildMembersErrorType::LimitInvalid { limit },
             });
         }
 
-        self.fields.limit.replace(limit);
+        self.fields.limit = Some(limit);
 
         Ok(self)
     }
 
     /// Sets whether to retrieve matched member presences
-    pub fn presences(mut self, presences: bool) -> Self {
-        self.fields.presences.replace(presences);
+    pub const fn presences(mut self, presences: bool) -> Self {
+        self.fields.presences = Some(presences);
 
         self
     }

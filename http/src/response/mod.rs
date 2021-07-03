@@ -293,7 +293,7 @@ impl<T> Response<T> {
     ///
     /// Necessary for [`MemberBody`] and [`MemberListBody`] deserialization.
     pub(crate) fn set_guild_id(&mut self, guild_id: GuildId) {
-        self.guild_id.replace(guild_id);
+        self.guild_id = Some(guild_id);
     }
 
     /// ID of the configured guild.

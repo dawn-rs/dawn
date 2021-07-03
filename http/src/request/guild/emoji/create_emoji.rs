@@ -56,8 +56,8 @@ impl<'a> CreateEmoji<'a> {
     /// Refer to [the discord docs] for more information.
     ///
     /// [the discord docs]: https://discord.com/developers/docs/resources/emoji
-    pub fn roles(mut self, roles: &'a [RoleId]) -> Self {
-        self.fields.roles.replace(roles);
+    pub const fn roles(mut self, roles: &'a [RoleId]) -> Self {
+        self.fields.roles = Some(roles);
 
         self
     }

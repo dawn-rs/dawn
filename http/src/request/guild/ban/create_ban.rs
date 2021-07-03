@@ -57,7 +57,6 @@ pub enum CreateBanErrorType {
     DeleteMessageDaysInvalid,
 }
 
-#[derive(Default)]
 struct CreateBanFields<'a> {
     delete_message_days: Option<u64>,
     reason: Option<&'a str>,
@@ -96,9 +95,12 @@ pub struct CreateBan<'a> {
 }
 
 impl<'a> CreateBan<'a> {
-    pub(crate) fn new(http: &'a Client, guild_id: GuildId, user_id: UserId) -> Self {
+    pub(crate) const fn new(http: &'a Client, guild_id: GuildId, user_id: UserId) -> Self {
         Self {
-            fields: CreateBanFields::default(),
+            fields: CreateBanFields {
+                delete_message_days: None,
+                reason: None,
+            },
             guild_id,
             http,
             user_id,
@@ -113,14 +115,14 @@ impl<'a> CreateBan<'a> {
     ///
     /// Returns a [`CreateBanErrorType::DeleteMessageDaysInvalid`] error type if
     /// the number of days is greater than 7.
-    pub fn delete_message_days(mut self, days: u64) -> Result<Self, CreateBanError> {
+    pub const fn delete_message_days(mut self, days: u64) -> Result<Self, CreateBanError> {
         if !validate::ban_delete_message_days(days) {
             return Err(CreateBanError {
                 kind: CreateBanErrorType::DeleteMessageDaysInvalid,
             });
         }
 
-        self.fields.delete_message_days.replace(days);
+        self.fields.delete_message_days = Some(days);
 
         Ok(self)
     }

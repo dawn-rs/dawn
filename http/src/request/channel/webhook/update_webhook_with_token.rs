@@ -7,7 +7,7 @@ use crate::{
 use serde::Serialize;
 use twilight_model::{channel::Webhook, id::WebhookId};
 
-#[derive(Default, Serialize)]
+#[derive(Serialize)]
 struct UpdateWebhookWithTokenFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     avatar: Option<NullableField<&'a str>>,
@@ -24,9 +24,12 @@ pub struct UpdateWebhookWithToken<'a> {
 }
 
 impl<'a> UpdateWebhookWithToken<'a> {
-    pub(crate) fn new(http: &'a Client, webhook_id: WebhookId, token: &'a str) -> Self {
+    pub(crate) const fn new(http: &'a Client, webhook_id: WebhookId, token: &'a str) -> Self {
         Self {
-            fields: UpdateWebhookWithTokenFields::default(),
+            fields: UpdateWebhookWithTokenFields {
+                avatar: None,
+                name: None,
+            },
             http,
             token,
             webhook_id,
@@ -40,17 +43,15 @@ impl<'a> UpdateWebhookWithToken<'a> {
     /// base64-encoded image.
     ///
     /// [Discord Docs/Image Data]: https://discord.com/developers/docs/reference#image-data
-    pub fn avatar(mut self, avatar: Option<&'a str>) -> Self {
-        self.fields
-            .avatar
-            .replace(NullableField::from_option(avatar));
+    pub const fn avatar(mut self, avatar: Option<&'a str>) -> Self {
+        self.fields.avatar = Some(NullableField(avatar));
 
         self
     }
 
     /// Change the name of the webhook.
-    pub fn name(mut self, name: Option<&'a str>) -> Self {
-        self.fields.name.replace(NullableField::from_option(name));
+    pub const fn name(mut self, name: Option<&'a str>) -> Self {
+        self.fields.name = Some(NullableField(name));
 
         self
     }

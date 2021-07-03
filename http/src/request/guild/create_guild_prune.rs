@@ -102,8 +102,8 @@ impl<'a> CreateGuildPrune<'a> {
     }
 
     /// Return the amount of pruned members. Discouraged for large guilds.
-    pub fn compute_prune_count(mut self, compute_prune_count: bool) -> Self {
-        self.fields.compute_prune_count.replace(compute_prune_count);
+    pub const fn compute_prune_count(mut self, compute_prune_count: bool) -> Self {
+        self.fields.compute_prune_count = Some(compute_prune_count);
 
         self
     }
@@ -116,14 +116,14 @@ impl<'a> CreateGuildPrune<'a> {
     ///
     /// Returns a [`CreateGuildPruneErrorType::DaysInvalid`] error type if the
     /// number of days is 0.
-    pub fn days(mut self, days: u64) -> Result<Self, CreateGuildPruneError> {
+    pub const fn days(mut self, days: u64) -> Result<Self, CreateGuildPruneError> {
         if !validate::guild_prune_days(days) {
             return Err(CreateGuildPruneError {
                 kind: CreateGuildPruneErrorType::DaysInvalid,
             });
         }
 
-        self.fields.days.replace(days);
+        self.fields.days = Some(days);
 
         Ok(self)
     }

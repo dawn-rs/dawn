@@ -10,7 +10,7 @@ use twilight_model::{
     id::{EmojiId, GuildId, RoleId},
 };
 
-#[derive(Default, Serialize)]
+#[derive(Serialize)]
 struct UpdateEmojiFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<&'a str>,
@@ -28,9 +28,12 @@ pub struct UpdateEmoji<'a> {
 }
 
 impl<'a> UpdateEmoji<'a> {
-    pub(crate) fn new(http: &'a Client, guild_id: GuildId, emoji_id: EmojiId) -> Self {
+    pub(crate) const fn new(http: &'a Client, guild_id: GuildId, emoji_id: EmojiId) -> Self {
         Self {
-            fields: UpdateEmojiFields::default(),
+            fields: UpdateEmojiFields {
+                name: None,
+                roles: None,
+            },
             emoji_id,
             guild_id,
             http,
@@ -39,15 +42,15 @@ impl<'a> UpdateEmoji<'a> {
     }
 
     /// Change the name of the emoji.
-    pub fn name(mut self, name: &'a str) -> Self {
-        self.fields.name.replace(name);
+    pub const fn name(mut self, name: &'a str) -> Self {
+        self.fields.name = Some(name);
 
         self
     }
 
     /// Change the roles that the emoji is whitelisted to.
-    pub fn roles(mut self, roles: &'a [RoleId]) -> Self {
-        self.fields.roles.replace(roles);
+    pub const fn roles(mut self, roles: &'a [RoleId]) -> Self {
+        self.fields.roles = Some(roles);
 
         self
     }

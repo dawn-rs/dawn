@@ -10,7 +10,7 @@ use twilight_model::{
     id::{ChannelId, WebhookId},
 };
 
-#[derive(Default, Serialize)]
+#[derive(Serialize)]
 struct UpdateWebhookFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     avatar: Option<NullableField<&'a str>>,
@@ -30,9 +30,13 @@ pub struct UpdateWebhook<'a> {
 
 /// Update a webhook by its ID.
 impl<'a> UpdateWebhook<'a> {
-    pub(crate) fn new(http: &'a Client, webhook_id: WebhookId) -> Self {
+    pub(crate) const fn new(http: &'a Client, webhook_id: WebhookId) -> Self {
         Self {
-            fields: UpdateWebhookFields::default(),
+            fields: UpdateWebhookFields {
+                avatar: None,
+                channel_id: None,
+                name: None,
+            },
             http,
             webhook_id,
             reason: None,
@@ -46,24 +50,22 @@ impl<'a> UpdateWebhook<'a> {
     /// base64-encoded image.
     ///
     /// [Discord Docs/Image Data]: https://discord.com/developers/docs/reference#image-data
-    pub fn avatar(mut self, avatar: Option<&'a str>) -> Self {
-        self.fields
-            .avatar
-            .replace(NullableField::from_option(avatar));
+    pub const fn avatar(mut self, avatar: Option<&'a str>) -> Self {
+        self.fields.avatar = Some(NullableField(avatar));
 
         self
     }
 
     /// Move this webhook to a new channel.
-    pub fn channel_id(mut self, channel_id: ChannelId) -> Self {
-        self.fields.channel_id.replace(channel_id);
+    pub const fn channel_id(mut self, channel_id: ChannelId) -> Self {
+        self.fields.channel_id = Some(channel_id);
 
         self
     }
 
     /// Change the name of the webhook.
-    pub fn name(mut self, name: Option<&'a str>) -> Self {
-        self.fields.name.replace(NullableField::from_option(name));
+    pub const fn name(mut self, name: Option<&'a str>) -> Self {
+        self.fields.name = Some(NullableField(name));
 
         self
     }

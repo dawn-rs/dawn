@@ -52,8 +52,8 @@ impl<'a> UpdateUserVoiceState<'a> {
     /// removed.
     ///
     /// [`MUTE_MEMBERS`]: twilight_model::guild::Permissions::MUTE_MEMBERS
-    pub fn suppress(mut self) -> Self {
-        self.fields.suppress.replace(true);
+    pub const fn suppress(mut self) -> Self {
+        self.fields.suppress = Some(true);
 
         self
     }

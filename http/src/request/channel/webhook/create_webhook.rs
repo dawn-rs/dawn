@@ -57,8 +57,8 @@ impl<'a> CreateWebhook<'a> {
     /// for more information.
     ///
     /// [the discord docs]: https://discord.com/developers/docs/reference#image-data
-    pub fn avatar(mut self, avatar: &'a str) -> Self {
-        self.fields.avatar.replace(avatar);
+    pub const fn avatar(mut self, avatar: &'a str) -> Self {
+        self.fields.avatar = Some(avatar);
 
         self
     }

@@ -112,14 +112,14 @@ impl<'a> GetChannelMessagesConfigured<'a> {
     ///
     /// Returns a [`GetChannelMessagesConfiguredErrorType::LimitInvalid`] error
     /// type if the amount is greater than 21600.
-    pub fn limit(mut self, limit: u64) -> Result<Self, GetChannelMessagesConfiguredError> {
+    pub const fn limit(mut self, limit: u64) -> Result<Self, GetChannelMessagesConfiguredError> {
         if !validate::get_channel_messages_limit(limit) {
             return Err(GetChannelMessagesConfiguredError {
                 kind: GetChannelMessagesConfiguredErrorType::LimitInvalid,
             });
         }
 
-        self.fields.limit.replace(limit);
+        self.fields.limit = Some(limit);
 
         Ok(self)
     }

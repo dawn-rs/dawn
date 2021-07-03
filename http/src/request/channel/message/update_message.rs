@@ -93,7 +93,7 @@ pub enum UpdateMessageErrorType {
     },
 }
 
-#[derive(Default, Serialize)]
+#[derive(Serialize)]
 struct UpdateMessageFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) allowed_mentions: Option<AllowedMentions>,
@@ -163,10 +163,20 @@ pub struct UpdateMessage<'a> {
 }
 
 impl<'a> UpdateMessage<'a> {
-    pub(crate) fn new(http: &'a Client, channel_id: ChannelId, message_id: MessageId) -> Self {
+    pub(crate) const fn new(
+        http: &'a Client,
+        channel_id: ChannelId,
+        message_id: MessageId,
+    ) -> Self {
         Self {
             channel_id,
-            fields: UpdateMessageFields::default(),
+            fields: UpdateMessageFields {
+                allowed_mentions: None,
+                attachments: &[],
+                content: None,
+                embeds: None,
+                flags: None,
+            },
             http,
             message_id,
         }
@@ -208,9 +218,7 @@ impl<'a> UpdateMessage<'a> {
             }
         }
 
-        self.fields
-            .content
-            .replace(NullableField::from_option(content));
+        self.fields.content = Some(NullableField(content));
 
         Ok(self)
     }
@@ -246,15 +254,21 @@ impl<'a> UpdateMessage<'a> {
     }
 
     /// Suppress the embeds in the message.
-    pub fn suppress_embeds(mut self, suppress: bool) -> Self {
-        let mut flags = self.fields.flags.unwrap_or_else(MessageFlags::empty);
+    pub const fn suppress_embeds(mut self, suppress: bool) -> Self {
+        #[allow(clippy::option_if_let_else)]
+        let mut bits = if let Some(flags) = self.fields.flags {
+            flags.bits()
+        } else {
+            0
+        };
 
         if suppress {
-            flags |= MessageFlags::SUPPRESS_EMBEDS;
+            bits |= MessageFlags::SUPPRESS_EMBEDS.bits();
         } else {
-            flags &= !MessageFlags::SUPPRESS_EMBEDS;
+            bits &= !MessageFlags::SUPPRESS_EMBEDS.bits()
         }
-        self.fields.flags.replace(flags);
+
+        self.fields.flags = Some(MessageFlags::from_bits_truncate(bits));
 
         self
     }

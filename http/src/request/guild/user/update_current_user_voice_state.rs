@@ -44,15 +44,12 @@ impl<'a> UpdateCurrentUserVoiceState<'a> {
     ///
     /// - You are able to set `request_to_speak_timestamp` to any present or
     /// future time.
-    pub fn request_to_speak_timestamp(mut self, request_to_speak_timestamp: &'a str) -> Self {
+    pub const fn request_to_speak_timestamp(mut self, request_to_speak_timestamp: &'a str) -> Self {
         if request_to_speak_timestamp.is_empty() {
-            self.fields
-                .request_to_speak_timestamp
-                .replace(NullableField::Null);
+            self.fields.request_to_speak_timestamp = Some(NullableField(None));
         } else {
-            self.fields
-                .request_to_speak_timestamp
-                .replace(NullableField::Value(request_to_speak_timestamp));
+            self.fields.request_to_speak_timestamp =
+                Some(NullableField(Some(request_to_speak_timestamp)));
         }
 
         self
@@ -64,8 +61,8 @@ impl<'a> UpdateCurrentUserVoiceState<'a> {
     ///
     /// - You must have the `MUTE_MEMBERS` permission to unsuppress yourself.
     /// You can always suppress yourself.
-    pub fn suppress(mut self) -> Self {
-        self.fields.suppress.replace(true);
+    pub const fn suppress(mut self) -> Self {
+        self.fields.suppress = Some(true);
 
         self
     }

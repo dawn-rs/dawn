@@ -29,8 +29,8 @@ impl<'a> DeleteWebhook<'a> {
     }
 
     /// Specify the token for auth, if not already authenticated with a Bot token.
-    pub fn token(mut self, token: &'a str) -> Self {
-        self.fields.token.replace(token);
+    pub const fn token(mut self, token: &'a str) -> Self {
+        self.fields.token = Some(token);
 
         self
     }

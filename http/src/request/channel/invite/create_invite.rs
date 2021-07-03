@@ -62,7 +62,7 @@ pub enum CreateInviteErrorType {
     MaxUsesTooLarge,
 }
 
-#[derive(Default, Serialize)]
+#[derive(Serialize)]
 struct CreateInviteFields {
     #[serde(skip_serializing_if = "Option::is_none")]
     max_age: Option<u64>,
@@ -112,10 +112,18 @@ pub struct CreateInvite<'a> {
 }
 
 impl<'a> CreateInvite<'a> {
-    pub(crate) fn new(http: &'a Client, channel_id: ChannelId) -> Self {
+    pub(crate) const fn new(http: &'a Client, channel_id: ChannelId) -> Self {
         Self {
             channel_id,
-            fields: CreateInviteFields::default(),
+            fields: CreateInviteFields {
+                max_age: None,
+                max_uses: None,
+                temporary: None,
+                target_application_id: None,
+                target_user_id: None,
+                target_type: None,
+                unique: None,
+            },
             http,
             reason: None,
         }
@@ -149,14 +157,14 @@ impl<'a> CreateInvite<'a> {
     /// println!("invite code: {}", invite.code);
     /// # Ok(()) }
     /// ```
-    pub fn max_age(mut self, max_age: u64) -> Result<Self, CreateInviteError> {
+    pub const fn max_age(mut self, max_age: u64) -> Result<Self, CreateInviteError> {
         if !validate::invite_max_age(max_age) {
             return Err(CreateInviteError {
                 kind: CreateInviteErrorType::MaxAgeTooOld,
             });
         }
 
-        self.fields.max_age.replace(max_age);
+        self.fields.max_age = Some(max_age);
 
         Ok(self)
     }
@@ -187,14 +195,14 @@ impl<'a> CreateInvite<'a> {
     /// println!("invite code: {}", invite.code);
     /// # Ok(()) }
     /// ```
-    pub fn max_uses(mut self, max_uses: u64) -> Result<Self, CreateInviteError> {
+    pub const fn max_uses(mut self, max_uses: u64) -> Result<Self, CreateInviteError> {
         if !validate::invite_max_uses(max_uses) {
             return Err(CreateInviteError {
                 kind: CreateInviteErrorType::MaxUsesTooLarge,
             });
         }
 
-        self.fields.max_uses.replace(max_uses);
+        self.fields.max_uses = Some(max_uses);
 
         Ok(self)
     }
@@ -204,24 +212,22 @@ impl<'a> CreateInvite<'a> {
     /// This only works if [`target_type`] is set to [`TargetType::EmbeddedApplication`].
     ///
     /// [`target_type`]: Self::target_type
-    pub fn target_application_id(mut self, target_application_id: ApplicationId) -> Self {
-        self.fields
-            .target_application_id
-            .replace(target_application_id);
+    pub const fn target_application_id(mut self, target_application_id: ApplicationId) -> Self {
+        self.fields.target_application_id = Some(target_application_id);
 
         self
     }
 
     /// Set the target user id for this invite.
-    pub fn target_user_id(mut self, target_user_id: UserId) -> Self {
-        self.fields.target_user_id.replace(target_user_id);
+    pub const fn target_user_id(mut self, target_user_id: UserId) -> Self {
+        self.fields.target_user_id = Some(target_user_id);
 
         self
     }
 
     /// Set the target type for this invite.
-    pub fn target_type(mut self, target_type: TargetType) -> Self {
-        self.fields.target_type.replace(target_type);
+    pub const fn target_type(mut self, target_type: TargetType) -> Self {
+        self.fields.target_type = Some(target_type);
 
         self
     }
@@ -229,8 +235,8 @@ impl<'a> CreateInvite<'a> {
     /// Specify true if the invite should grant temporary membership.
     ///
     /// Defaults to false.
-    pub fn temporary(mut self, temporary: bool) -> Self {
-        self.fields.temporary.replace(temporary);
+    pub const fn temporary(mut self, temporary: bool) -> Self {
+        self.fields.temporary = Some(temporary);
 
         self
     }
@@ -241,8 +247,8 @@ impl<'a> CreateInvite<'a> {
     /// invites). Refer to [the discord docs] for more information.
     ///
     /// [the discord docs]: https://discord.com/developers/docs/resources/channel#create-channel-invite
-    pub fn unique(mut self, unique: bool) -> Self {
-        self.fields.unique.replace(unique);
+    pub const fn unique(mut self, unique: bool) -> Self {
+        self.fields.unique = Some(unique);
 
         self
     }

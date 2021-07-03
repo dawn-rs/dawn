@@ -65,7 +65,7 @@ pub enum UpdateStageInstanceErrorType {
     InvalidTopic,
 }
 
-#[derive(Default, Serialize)]
+#[derive(Serialize)]
 struct UpdateStageInstanceFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     privacy_level: Option<PrivacyLevel>,
@@ -83,17 +83,20 @@ pub struct UpdateStageInstance<'a> {
 }
 
 impl<'a> UpdateStageInstance<'a> {
-    pub(crate) fn new(http: &'a Client, channel_id: ChannelId) -> Self {
+    pub(crate) const fn new(http: &'a Client, channel_id: ChannelId) -> Self {
         Self {
             channel_id,
-            fields: UpdateStageInstanceFields::default(),
+            fields: UpdateStageInstanceFields {
+                privacy_level: None,
+                topic: None,
+            },
             http,
         }
     }
 
     /// Set the [`PrivacyLevel`] of the instance.
-    pub fn privacy_level(mut self, privacy_level: PrivacyLevel) -> Self {
-        self.fields.privacy_level.replace(privacy_level);
+    pub const fn privacy_level(mut self, privacy_level: PrivacyLevel) -> Self {
+        self.fields.privacy_level = Some(privacy_level);
 
         self
     }

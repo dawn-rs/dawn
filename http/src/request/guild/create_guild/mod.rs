@@ -264,15 +264,15 @@ impl<'a> CreateGuild<'a> {
     /// This must be an ID specified in [`channels`].
     ///
     /// [`channels`]: Self::channels
-    pub fn afk_channel_id(mut self, afk_channel_id: ChannelId) -> Self {
-        self.fields.afk_channel_id.replace(afk_channel_id);
+    pub const fn afk_channel_id(mut self, afk_channel_id: ChannelId) -> Self {
+        self.fields.afk_channel_id = Some(afk_channel_id);
 
         self
     }
 
     /// Set the AFK timeout, in seconds.
-    pub fn afk_timeout(mut self, afk_timeout: u64) -> Self {
-        self.fields.afk_timeout.replace(afk_timeout);
+    pub const fn afk_timeout(mut self, afk_timeout: u64) -> Self {
+        self.fields.afk_timeout = Some(afk_timeout);
 
         self
     }
@@ -338,25 +338,21 @@ impl<'a> CreateGuild<'a> {
     /// information.
     ///
     /// [the discord docs]: https://discord.com/developers/docs/resources/guild#create-guild
-    pub fn default_message_notifications(
+    pub const fn default_message_notifications(
         mut self,
         default_message_notifications: DefaultMessageNotificationLevel,
     ) -> Self {
-        self.fields
-            .default_message_notifications
-            .replace(default_message_notifications);
+        self.fields.default_message_notifications = Some(default_message_notifications);
 
         self
     }
 
     /// Set the explicit content filter level.
-    pub fn explicit_content_filter(
+    pub const fn explicit_content_filter(
         mut self,
         explicit_content_filter: ExplicitContentFilter,
     ) -> Self {
-        self.fields
-            .explicit_content_filter
-            .replace(explicit_content_filter);
+        self.fields.explicit_content_filter = Some(explicit_content_filter);
 
         self
     }
@@ -397,17 +393,15 @@ impl<'a> CreateGuild<'a> {
     /// This must be an ID specified in [`channels`].
     ///
     /// [`channels`]: Self::channels
-    pub fn system_channel_id(mut self, system_channel_id: ChannelId) -> Self {
-        self.fields.system_channel_id.replace(system_channel_id);
+    pub const fn system_channel_id(mut self, system_channel_id: ChannelId) -> Self {
+        self.fields.system_channel_id = Some(system_channel_id);
 
         self
     }
 
     /// Set the guild's [`SystemChannelFlags`].
-    pub fn system_channel_flags(mut self, system_channel_flags: SystemChannelFlags) -> Self {
-        self.fields
-            .system_channel_flags
-            .replace(system_channel_flags);
+    pub const fn system_channel_flags(mut self, system_channel_flags: SystemChannelFlags) -> Self {
+        self.fields.system_channel_flags = Some(system_channel_flags);
 
         self
     }

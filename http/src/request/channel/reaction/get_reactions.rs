@@ -62,7 +62,6 @@ pub enum GetReactionsErrorType {
     },
 }
 
-#[derive(Default)]
 struct GetReactionsFields {
     after: Option<UserId>,
     limit: Option<u64>,
@@ -81,7 +80,7 @@ pub struct GetReactions<'a> {
 }
 
 impl<'a> GetReactions<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         http: &'a Client,
         channel_id: ChannelId,
         message_id: MessageId,
@@ -90,15 +89,18 @@ impl<'a> GetReactions<'a> {
         Self {
             channel_id,
             emoji,
-            fields: GetReactionsFields::default(),
+            fields: GetReactionsFields {
+                after: None,
+                limit: None,
+            },
             http,
             message_id,
         }
     }
 
     /// Get users after this id.
-    pub fn after(mut self, after: UserId) -> Self {
-        self.fields.after.replace(after);
+    pub const fn after(mut self, after: UserId) -> Self {
+        self.fields.after = Some(after);
 
         self
     }
@@ -112,14 +114,14 @@ impl<'a> GetReactions<'a> {
     ///
     /// Returns a [`GetReactionsErrorType::LimitInvalid`] error type if the
     /// amount is greater than 100.
-    pub fn limit(mut self, limit: u64) -> Result<Self, GetReactionsError> {
+    pub const fn limit(mut self, limit: u64) -> Result<Self, GetReactionsError> {
         if !validate::get_reactions_limit(limit) {
             return Err(GetReactionsError {
                 kind: GetReactionsErrorType::LimitInvalid { limit },
             });
         }
 
-        self.fields.limit.replace(limit);
+        self.fields.limit = Some(limit);
 
         Ok(self)
     }

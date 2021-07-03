@@ -69,7 +69,7 @@ pub enum UpdateChannelErrorType {
 
 // The Discord API doesn't require the `name` and `kind` fields to be present,
 // but it does require them to be non-null.
-#[derive(Default, Serialize)]
+#[derive(Serialize)]
 struct UpdateChannelFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     bitrate: Option<u64>,
@@ -108,18 +108,30 @@ pub struct UpdateChannel<'a> {
 }
 
 impl<'a> UpdateChannel<'a> {
-    pub(crate) fn new(http: &'a Client, channel_id: ChannelId) -> Self {
+    pub(crate) const fn new(http: &'a Client, channel_id: ChannelId) -> Self {
         Self {
             channel_id,
-            fields: UpdateChannelFields::default(),
+            fields: UpdateChannelFields {
+                bitrate: None,
+                name: None,
+                nsfw: None,
+                parent_id: None,
+                permission_overwrites: None,
+                position: None,
+                rate_limit_per_user: None,
+                topic: None,
+                user_limit: None,
+                video_quality_mode: None,
+                kind: None,
+            },
             http,
             reason: None,
         }
     }
 
     /// Set the bitrate of the channel. Applicable to voice channels only.
-    pub fn bitrate(mut self, bitrate: u64) -> Self {
-        self.fields.bitrate.replace(bitrate);
+    pub const fn bitrate(mut self, bitrate: u64) -> Self {
+        self.fields.bitrate = Some(bitrate);
 
         self
     }
@@ -140,37 +152,33 @@ impl<'a> UpdateChannel<'a> {
             });
         }
 
-        self.fields.name.replace(name);
+        self.fields.name = Some(name);
 
         Ok(self)
     }
 
     /// Set whether the channel is marked as NSFW.
-    pub fn nsfw(mut self, nsfw: bool) -> Self {
-        self.fields.nsfw.replace(nsfw);
+    pub const fn nsfw(mut self, nsfw: bool) -> Self {
+        self.fields.nsfw = Some(nsfw);
 
         self
     }
 
     /// If this is specified, and the parent ID is a `ChannelType::CategoryChannel`, move this
     /// channel to a child of the category channel.
-    pub fn parent_id(mut self, parent_id: Option<ChannelId>) -> Self {
-        self.fields
-            .parent_id
-            .replace(NullableField::from_option(parent_id));
+    pub const fn parent_id(mut self, parent_id: Option<ChannelId>) -> Self {
+        self.fields.parent_id = Some(NullableField(parent_id));
 
         self
     }
 
     /// Set the permission overwrites of a channel. This will overwrite all permissions that the
     /// channel currently has, so use with caution!
-    pub fn permission_overwrites(
+    pub const fn permission_overwrites(
         mut self,
         permission_overwrites: &'a [PermissionOverwrite],
     ) -> Self {
-        self.fields
-            .permission_overwrites
-            .replace(permission_overwrites);
+        self.fields.permission_overwrites = Some(permission_overwrites);
 
         self
     }
@@ -179,8 +187,8 @@ impl<'a> UpdateChannel<'a> {
     ///
     /// Positions are numerical and zero-indexed. If you place a channel at position 2, channels
     /// 2-n will shift down one position and the initial channel will take its place.
-    pub fn position(mut self, position: u64) -> Self {
-        self.fields.position.replace(position);
+    pub const fn position(mut self, position: u64) -> Self {
+        self.fields.position = Some(position);
 
         self
     }
@@ -197,7 +205,7 @@ impl<'a> UpdateChannel<'a> {
     /// type if the amount is greater than 21600.
     ///
     /// [the discord docs]: https://discordapp.com/developers/docs/resources/channel#channel-object-channel-structure>
-    pub fn rate_limit_per_user(
+    pub const fn rate_limit_per_user(
         mut self,
         rate_limit_per_user: u64,
     ) -> Result<Self, UpdateChannelError> {
@@ -207,7 +215,7 @@ impl<'a> UpdateChannel<'a> {
             });
         }
 
-        self.fields.rate_limit_per_user.replace(rate_limit_per_user);
+        self.fields.rate_limit_per_user = Some(rate_limit_per_user);
 
         Ok(self)
     }
@@ -240,15 +248,15 @@ impl<'a> UpdateChannel<'a> {
     /// discord docs] for more details.
     ///
     /// [the discord docs]: https://discord.com/developers/docs/resources/channel#modify-channel-json-params
-    pub fn user_limit(mut self, user_limit: u64) -> Self {
-        self.fields.user_limit.replace(user_limit);
+    pub const fn user_limit(mut self, user_limit: u64) -> Self {
+        self.fields.user_limit = Some(user_limit);
 
         self
     }
 
     /// Set the [`VideoQualityMode`] for the voice channel.
-    pub fn video_quality_mode(mut self, video_quality_mode: VideoQualityMode) -> Self {
-        self.fields.video_quality_mode.replace(video_quality_mode);
+    pub const fn video_quality_mode(mut self, video_quality_mode: VideoQualityMode) -> Self {
+        self.fields.video_quality_mode = Some(video_quality_mode);
 
         self
     }
@@ -260,8 +268,8 @@ impl<'a> UpdateChannel<'a> {
     /// details.
     ///
     /// [the discord docs]: https://discord.com/developers/docs/resources/channel#modify-channel-json-params
-    pub fn kind(mut self, kind: ChannelType) -> Self {
-        self.fields.kind.replace(kind);
+    pub const fn kind(mut self, kind: ChannelType) -> Self {
+        self.fields.kind = Some(kind);
 
         self
     }

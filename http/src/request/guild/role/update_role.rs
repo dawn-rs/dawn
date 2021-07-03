@@ -10,7 +10,7 @@ use twilight_model::{
     id::{GuildId, RoleId},
 };
 
-#[derive(Default, Serialize)]
+#[derive(Serialize)]
 struct UpdateRoleFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     color: Option<NullableField<u32>>,
@@ -34,9 +34,15 @@ pub struct UpdateRole<'a> {
 }
 
 impl<'a> UpdateRole<'a> {
-    pub(crate) fn new(http: &'a Client, guild_id: GuildId, role_id: RoleId) -> Self {
+    pub(crate) const fn new(http: &'a Client, guild_id: GuildId, role_id: RoleId) -> Self {
         Self {
-            fields: UpdateRoleFields::default(),
+            fields: UpdateRoleFields {
+                color: None,
+                hoist: None,
+                mentionable: None,
+                name: None,
+                permissions: None,
+            },
             guild_id,
             http,
             role_id,
@@ -45,36 +51,36 @@ impl<'a> UpdateRole<'a> {
     }
 
     /// Set the color of the role.
-    pub fn color(mut self, color: Option<u32>) -> Self {
-        self.fields.color.replace(NullableField::from_option(color));
+    pub const fn color(mut self, color: Option<u32>) -> Self {
+        self.fields.color = Some(NullableField(color));
 
         self
     }
 
     /// If true, display the role in the members list.
-    pub fn hoist(mut self, hoist: bool) -> Self {
-        self.fields.hoist.replace(hoist);
+    pub const fn hoist(mut self, hoist: bool) -> Self {
+        self.fields.hoist = Some(hoist);
 
         self
     }
 
     /// If true, the role can be @mentioned (pinged) in chat.
-    pub fn mentionable(mut self, mentionable: bool) -> Self {
-        self.fields.mentionable.replace(mentionable);
+    pub const fn mentionable(mut self, mentionable: bool) -> Self {
+        self.fields.mentionable = Some(mentionable);
 
         self
     }
 
     /// Set the name of the role.
-    pub fn name(mut self, name: Option<&'a str>) -> Self {
-        self.fields.name.replace(NullableField::from_option(name));
+    pub const fn name(mut self, name: Option<&'a str>) -> Self {
+        self.fields.name = Some(NullableField(name));
 
         self
     }
 
     /// Set the allowed permissions of this role.
-    pub fn permissions(mut self, permissions: Permissions) -> Self {
-        self.fields.permissions.replace(permissions);
+    pub const fn permissions(mut self, permissions: Permissions) -> Self {
+        self.fields.permissions = Some(permissions);
 
         self
     }

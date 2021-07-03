@@ -41,15 +41,16 @@ impl<'a> RequestBuilder<'a> {
     /// Set the contents of the body.
     #[must_use = "request has not been fully built"]
     pub fn body(mut self, body: Vec<u8>) -> Self {
-        self.0.body.replace(body);
+        self.0.body = Some(body);
 
         self
     }
 
     /// Set the multipart form.
+    #[allow(clippy::missing_const_for_fn)]
     #[must_use = "request has not been fully built"]
     pub fn form(mut self, form: Form) -> Self {
-        self.0.form.replace(form);
+        self.0.form = Some(form);
 
         self
     }

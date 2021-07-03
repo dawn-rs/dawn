@@ -1,7 +1,6 @@
 use crate::{client::Client, request::Request, response::ResponseFuture, routing::Route};
 use twilight_model::invite::Invite;
 
-#[derive(Default)]
 struct GetInviteFields {
     with_counts: bool,
     with_expiration: bool,
@@ -39,10 +38,13 @@ pub struct GetInvite<'a> {
 }
 
 impl<'a> GetInvite<'a> {
-    pub(crate) fn new(http: &'a Client, code: &'a str) -> Self {
+    pub(crate) const fn new(http: &'a Client, code: &'a str) -> Self {
         Self {
             code,
-            fields: GetInviteFields::default(),
+            fields: GetInviteFields {
+                with_counts: false,
+                with_expiration: false,
+            },
             http,
         }
     }

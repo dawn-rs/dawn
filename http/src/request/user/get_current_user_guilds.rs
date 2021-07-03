@@ -109,15 +109,15 @@ impl<'a> GetCurrentUserGuilds<'a> {
     }
 
     /// Get guilds after this guild id.
-    pub fn after(mut self, guild_id: GuildId) -> Self {
-        self.fields.after.replace(guild_id);
+    pub const fn after(mut self, guild_id: GuildId) -> Self {
+        self.fields.after = Some(guild_id);
 
         self
     }
 
     /// Get guilds before this guild id.
-    pub fn before(mut self, guild_id: GuildId) -> Self {
-        self.fields.before.replace(guild_id);
+    pub const fn before(mut self, guild_id: GuildId) -> Self {
+        self.fields.before = Some(guild_id);
 
         self
     }
@@ -132,14 +132,14 @@ impl<'a> GetCurrentUserGuilds<'a> {
     /// the amount is greater than 100.
     ///
     /// [the discord docs]: https://discordapp.com/developers/docs/resources/user#get-current-user-guilds-query-string-params
-    pub fn limit(mut self, limit: u64) -> Result<Self, GetCurrentUserGuildsError> {
+    pub const fn limit(mut self, limit: u64) -> Result<Self, GetCurrentUserGuildsError> {
         if !validate::get_current_user_guilds_limit(limit) {
             return Err(GetCurrentUserGuildsError {
                 kind: GetCurrentUserGuildsErrorType::LimitInvalid,
             });
         }
 
-        self.fields.limit.replace(limit);
+        self.fields.limit = Some(limit);
 
         Ok(self)
     }

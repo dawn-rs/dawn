@@ -80,15 +80,15 @@ impl<'a> CreateFollowupMessage<'a> {
     }
 
     /// Specify the [`AllowedMentions`] for the webhook message.
-    pub fn allowed_mentions(mut self, allowed_mentions: &'a AllowedMentions) -> Self {
-        self.fields.allowed_mentions.replace(allowed_mentions);
+    pub const fn allowed_mentions(mut self, allowed_mentions: &'a AllowedMentions) -> Self {
+        self.fields.allowed_mentions = Some(allowed_mentions);
 
         self
     }
 
     /// The URL of the avatar of the webhook.
-    pub fn avatar_url(mut self, avatar_url: &'a str) -> Self {
-        self.fields.avatar_url.replace(avatar_url);
+    pub const fn avatar_url(mut self, avatar_url: &'a str) -> Self {
+        self.fields.avatar_url = Some(avatar_url);
 
         self
     }
@@ -103,16 +103,16 @@ impl<'a> CreateFollowupMessage<'a> {
     }
 
     /// Set the list of embeds of the webhook's message.
-    pub fn embeds(mut self, embeds: &'a [Embed]) -> Self {
-        self.fields.embeds.replace(embeds);
+    pub const fn embeds(mut self, embeds: &'a [Embed]) -> Self {
+        self.fields.embeds = Some(embeds);
 
         self
     }
 
     /// Set if the followup should be ephemeral.
-    pub fn ephemeral(mut self, ephemeral: bool) -> Self {
+    pub const fn ephemeral(mut self, ephemeral: bool) -> Self {
         if ephemeral {
-            self.fields.flags.replace(MessageFlags::EPHEMERAL);
+            self.fields.flags = Some(MessageFlags::EPHEMERAL);
         } else {
             self.fields.flags = None;
         }
@@ -185,22 +185,22 @@ impl<'a> CreateFollowupMessage<'a> {
     ///
     /// [`payload_json`]: Self::payload_json
     /// [Discord Docs/Create Message]: https://discord.com/developers/docs/resources/channel#create-message-params
-    pub fn payload_json(mut self, payload_json: &'a [u8]) -> Self {
-        self.fields.payload_json.replace(payload_json);
+    pub const fn payload_json(mut self, payload_json: &'a [u8]) -> Self {
+        self.fields.payload_json = Some(payload_json);
 
         self
     }
 
     /// Specify true if the message is TTS.
-    pub fn tts(mut self, tts: bool) -> Self {
-        self.fields.tts.replace(tts);
+    pub const fn tts(mut self, tts: bool) -> Self {
+        self.fields.tts = Some(tts);
 
         self
     }
 
     /// Specify the username of the webhook's message.
-    pub fn username(mut self, username: &'a str) -> Self {
-        self.fields.username.replace(username);
+    pub const fn username(mut self, username: &'a str) -> Self {
+        self.fields.username = Some(username);
 
         self
     }

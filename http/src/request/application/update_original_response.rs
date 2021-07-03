@@ -217,9 +217,7 @@ impl<'a> UpdateOriginalResponse<'a> {
             }
         }
 
-        self.fields
-            .content
-            .replace(NullableField::from_option(content));
+        self.fields.content = Some(NullableField(content));
 
         Ok(self)
     }
@@ -297,9 +295,7 @@ impl<'a> UpdateOriginalResponse<'a> {
             }
         }
 
-        self.fields
-            .embeds
-            .replace(NullableField::from_option(embeds));
+        self.fields.embeds = Some(NullableField(embeds));
 
         Ok(self)
     }
@@ -320,8 +316,8 @@ impl<'a> UpdateOriginalResponse<'a> {
     /// [`files`]: Self::files
     /// [`CreateFollowupMessage::payload_json`]: super::CreateFollowupMessage::payload_json
     /// [Discord Docs/Create Message]: https://discord.com/developers/docs/resources/channel#create-message-params
-    pub fn payload_json(mut self, payload_json: &'a [u8]) -> Self {
-        self.fields.payload_json.replace(payload_json);
+    pub const fn payload_json(mut self, payload_json: &'a [u8]) -> Self {
+        self.fields.payload_json = Some(payload_json);
 
         self
     }

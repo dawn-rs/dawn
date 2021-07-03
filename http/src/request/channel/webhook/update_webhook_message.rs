@@ -215,9 +215,7 @@ impl<'a> UpdateWebhookMessage<'a> {
             }
         }
 
-        self.fields
-            .content
-            .replace(NullableField::from_option(content));
+        self.fields.content = Some(NullableField(content));
 
         Ok(self)
     }
@@ -291,9 +289,7 @@ impl<'a> UpdateWebhookMessage<'a> {
             }
         }
 
-        self.fields
-            .embeds
-            .replace(NullableField::from_option(embeds));
+        self.fields.embeds = Some(NullableField(embeds));
 
         Ok(self)
     }
@@ -316,8 +312,8 @@ impl<'a> UpdateWebhookMessage<'a> {
     /// [`files`]: Self::files
     /// [`ExecuteWebhook::payload_json`]: super::ExecuteWebhook::payload_json
     /// [Discord Docs/Create Message]: https://discord.com/developers/docs/resources/channel#create-message-params
-    pub fn payload_json(mut self, payload_json: &'a [u8]) -> Self {
-        self.fields.payload_json.replace(payload_json);
+    pub const fn payload_json(mut self, payload_json: &'a [u8]) -> Self {
+        self.fields.payload_json = Some(payload_json);
 
         self
     }
@@ -398,7 +394,7 @@ mod tests {
         let body = UpdateWebhookMessageFields {
             allowed_mentions: None,
             attachments: &[],
-            content: Some(NullableField::Value("test")),
+            content: Some(NullableField(Some("test"))),
             embeds: None,
             payload_json: None,
         };

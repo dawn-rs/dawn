@@ -64,7 +64,7 @@ pub enum UpdateCurrentUserErrorType {
     UsernameInvalid,
 }
 
-#[derive(Default, Serialize)]
+#[derive(Serialize)]
 struct UpdateCurrentUserFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     avatar: Option<NullableField<&'a str>>,
@@ -82,9 +82,12 @@ pub struct UpdateCurrentUser<'a> {
 }
 
 impl<'a> UpdateCurrentUser<'a> {
-    pub(crate) fn new(http: &'a Client) -> Self {
+    pub(crate) const fn new(http: &'a Client) -> Self {
         Self {
-            fields: UpdateCurrentUserFields::default(),
+            fields: UpdateCurrentUserFields {
+                avatar: None,
+                username: None,
+            },
             http,
         }
     }
@@ -96,10 +99,8 @@ impl<'a> UpdateCurrentUser<'a> {
     /// for more information.
     ///
     /// [the discord docs]: https://discord.com/developers/docs/reference#image-data
-    pub fn avatar(mut self, avatar: Option<&'a str>) -> Self {
-        self.fields
-            .avatar
-            .replace(NullableField::from_option(avatar));
+    pub const fn avatar(mut self, avatar: Option<&'a str>) -> Self {
+        self.fields.avatar = Some(NullableField(avatar));
 
         self
     }

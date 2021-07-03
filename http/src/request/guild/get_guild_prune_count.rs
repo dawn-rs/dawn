@@ -79,9 +79,12 @@ pub struct GetGuildPruneCount<'a> {
 }
 
 impl<'a> GetGuildPruneCount<'a> {
-    pub(crate) fn new(http: &'a Client, guild_id: GuildId) -> Self {
+    pub(crate) const fn new(http: &'a Client, guild_id: GuildId) -> Self {
         Self {
-            fields: GetGuildPruneCountFields::default(),
+            fields: GetGuildPruneCountFields {
+                days: None,
+                include_roles: &[],
+            },
             guild_id,
             http,
         }
@@ -96,14 +99,14 @@ impl<'a> GetGuildPruneCount<'a> {
     ///
     /// Returns a [`GetGuildPruneCountErrorType::DaysInvalid`] error type if the
     /// number of days is 0.
-    pub fn days(mut self, days: u64) -> Result<Self, GetGuildPruneCountError> {
+    pub const fn days(mut self, days: u64) -> Result<Self, GetGuildPruneCountError> {
         if !validate::guild_prune_days(days) {
             return Err(GetGuildPruneCountError {
                 kind: GetGuildPruneCountErrorType::DaysInvalid,
             });
         }
 
-        self.fields.days.replace(days);
+        self.fields.days = Some(days);
 
         Ok(self)
     }

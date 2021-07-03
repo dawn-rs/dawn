@@ -1,7 +1,6 @@
 use crate::{client::Client, request::Request, response::ResponseFuture, routing::Route};
 use twilight_model::{guild::Guild, id::GuildId};
 
-#[derive(Default)]
 struct GetGuildFields {
     with_counts: bool,
 }
@@ -14,9 +13,9 @@ pub struct GetGuild<'a> {
 }
 
 impl<'a> GetGuild<'a> {
-    pub(crate) fn new(http: &'a Client, guild_id: GuildId) -> Self {
+    pub(crate) const fn new(http: &'a Client, guild_id: GuildId) -> Self {
         Self {
-            fields: GetGuildFields::default(),
+            fields: GetGuildFields { with_counts: false },
             guild_id,
             http,
         }

@@ -118,7 +118,7 @@ impl<'a> SearchGuildMembers<'a> {
     ///
     /// Returns a [`SearchGuildMembersErrorType::LimitInvalid`] error type if
     /// the limit is 0 or greater than 1000.
-    pub fn limit(mut self, limit: u64) -> Result<Self, SearchGuildMembersError> {
+    pub const fn limit(mut self, limit: u64) -> Result<Self, SearchGuildMembersError> {
         // Using get_guild_members_limit here as the limits are the same
         // and this endpoint is not officially documented yet.
         if !validate::search_guild_members_limit(limit) {
@@ -127,7 +127,7 @@ impl<'a> SearchGuildMembers<'a> {
             });
         }
 
-        self.fields.limit.replace(limit);
+        self.fields.limit = Some(limit);
 
         Ok(self)
     }

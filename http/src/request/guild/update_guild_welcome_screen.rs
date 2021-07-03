@@ -32,24 +32,28 @@ pub struct UpdateGuildWelcomeScreen<'a> {
 }
 
 impl<'a> UpdateGuildWelcomeScreen<'a> {
-    pub(crate) fn new(http: &'a Client, guild_id: GuildId) -> Self {
+    pub(crate) const fn new(http: &'a Client, guild_id: GuildId) -> Self {
         Self {
-            fields: UpdateGuildWelcomeScreenFields::default(),
+            fields: UpdateGuildWelcomeScreenFields {
+                description: None,
+                enabled: None,
+                welcome_channels: &[],
+            },
             guild_id,
             http,
         }
     }
 
     /// Set the description of the welcome screen.
-    pub fn description(mut self, description: &'a str) -> Self {
-        self.fields.description.replace(description);
+    pub const fn description(mut self, description: &'a str) -> Self {
+        self.fields.description = Some(description);
 
         self
     }
 
     /// Set whether the welcome screen is enabled.
-    pub fn enabled(mut self, enabled: bool) -> Self {
-        self.fields.enabled.replace(enabled);
+    pub const fn enabled(mut self, enabled: bool) -> Self {
+        self.fields.enabled = Some(enabled);
 
         self
     }

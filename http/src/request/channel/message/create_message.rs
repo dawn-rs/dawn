@@ -230,8 +230,8 @@ impl<'a> CreateMessage<'a> {
     }
 
     /// Attach a nonce to the message, for optimistic message sending.
-    pub fn nonce(mut self, nonce: u64) -> Self {
-        self.fields.nonce.replace(nonce);
+    pub const fn nonce(mut self, nonce: u64) -> Self {
+        self.fields.nonce = Some(nonce);
 
         self
     }
@@ -243,8 +243,8 @@ impl<'a> CreateMessage<'a> {
     ///
     /// [`files`]: Self::files
     /// [Discord Docs/Create Message]: https://discord.com/developers/docs/resources/channel#create-message-params
-    pub fn payload_json(mut self, payload_json: &'a [u8]) -> Self {
-        self.fields.payload_json.replace(payload_json);
+    pub const fn payload_json(mut self, payload_json: &'a [u8]) -> Self {
+        self.fields.payload_json = Some(payload_json);
 
         self
     }
@@ -271,8 +271,8 @@ impl<'a> CreateMessage<'a> {
     }
 
     /// Specify true if the message is TTS.
-    pub fn tts(mut self, tts: bool) -> Self {
-        self.fields.tts.replace(tts);
+    pub const fn tts(mut self, tts: bool) -> Self {
+        self.fields.tts = Some(tts);
 
         self
     }

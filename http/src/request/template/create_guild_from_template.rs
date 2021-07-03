@@ -109,8 +109,8 @@ impl<'a> CreateGuildFromTemplate<'a> {
     /// for more information.
     ///
     /// [the discord docs]: https://discord.com/developers/docs/reference#image-data
-    pub fn icon(mut self, icon: &'a str) -> Self {
-        self.fields.icon.replace(icon);
+    pub const fn icon(mut self, icon: &'a str) -> Self {
+        self.fields.icon = Some(icon);
 
         self
     }

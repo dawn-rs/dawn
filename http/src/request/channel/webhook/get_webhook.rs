@@ -1,7 +1,6 @@
 use crate::{client::Client, request::Request, response::ResponseFuture, routing::Route};
 use twilight_model::{channel::Webhook, id::WebhookId};
 
-#[derive(Default)]
 struct GetWebhookFields<'a> {
     token: Option<&'a str>,
 }
@@ -14,9 +13,9 @@ pub struct GetWebhook<'a> {
 }
 
 impl<'a> GetWebhook<'a> {
-    pub(crate) fn new(http: &'a Client, id: WebhookId) -> Self {
+    pub(crate) const fn new(http: &'a Client, id: WebhookId) -> Self {
         Self {
-            fields: GetWebhookFields::default(),
+            fields: GetWebhookFields { token: None },
             http,
             id,
         }
@@ -24,8 +23,8 @@ impl<'a> GetWebhook<'a> {
 
     /// Specify the token for auth, if not already authenticated with a Bot
     /// token.
-    pub fn token(mut self, token: &'a str) -> Self {
-        self.fields.token.replace(token);
+    pub const fn token(mut self, token: &'a str) -> Self {
+        self.fields.token = Some(token);
 
         self
     }
