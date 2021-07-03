@@ -8,17 +8,17 @@ use serde::Serialize;
 use twilight_model::id::{ChannelId, GuildId};
 
 #[derive(Serialize)]
-struct UpdateCurrentUserVoiceStateFields {
+struct UpdateCurrentUserVoiceStateFields<'a> {
     channel_id: ChannelId,
     #[serde(skip_serializing_if = "Option::is_none")]
     suppress: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    request_to_speak_timestamp: Option<NullableField<String>>,
+    request_to_speak_timestamp: Option<NullableField<&'a str>>,
 }
 
 /// Update the current user's voice state.
 pub struct UpdateCurrentUserVoiceState<'a> {
-    fields: UpdateCurrentUserVoiceStateFields,
+    fields: UpdateCurrentUserVoiceStateFields<'a>,
     guild_id: GuildId,
     http: &'a Client,
 }
@@ -44,11 +44,7 @@ impl<'a> UpdateCurrentUserVoiceState<'a> {
     ///
     /// - You are able to set `request_to_speak_timestamp` to any present or
     /// future time.
-    pub fn request_to_speak_timestamp(self, request_to_speak_timestamp: impl Into<String>) -> Self {
-        self._request_to_speak_timestamp(request_to_speak_timestamp.into())
-    }
-
-    fn _request_to_speak_timestamp(mut self, request_to_speak_timestamp: String) -> Self {
+    pub fn request_to_speak_timestamp(mut self, request_to_speak_timestamp: &'a str) -> Self {
         if request_to_speak_timestamp.is_empty() {
             self.fields
                 .request_to_speak_timestamp

@@ -11,7 +11,7 @@ pub struct DeleteRole<'a> {
     guild_id: GuildId,
     http: &'a Client,
     role_id: RoleId,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 impl<'a> DeleteRole<'a> {
@@ -46,10 +46,9 @@ impl<'a> DeleteRole<'a> {
     }
 }
 
-impl<'a> AuditLogReason for DeleteRole<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for DeleteRole<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }

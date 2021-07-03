@@ -10,30 +10,30 @@ use twilight_model::{application::callback::InteractionResponse, id::Interaction
 /// Respond to an interaction, by ID and token.
 pub struct InteractionCallback<'a> {
     interaction_id: InteractionId,
-    interaction_token: String,
+    interaction_token: &'a str,
     response: InteractionResponse,
     http: &'a Client,
 }
 
 impl<'a> InteractionCallback<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         http: &'a Client,
         interaction_id: InteractionId,
-        interaction_token: impl Into<String>,
+        interaction_token: &'a str,
         response: InteractionResponse,
     ) -> Self {
         Self {
             interaction_id,
-            interaction_token: interaction_token.into(),
+            interaction_token,
             response,
             http,
         }
     }
 
-    fn request(&self) -> Result<Request, Error> {
+    fn request(&self) -> Result<Request<'a>, Error> {
         Ok(Request::builder(Route::InteractionCallback {
             interaction_id: self.interaction_id.0,
-            interaction_token: self.interaction_token.clone(),
+            interaction_token: self.interaction_token,
         })
         .json(&self.response)?
         .build())

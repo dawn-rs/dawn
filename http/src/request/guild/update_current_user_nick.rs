@@ -8,21 +8,21 @@ use serde::Serialize;
 use twilight_model::id::GuildId;
 
 #[derive(Serialize)]
-struct UpdateCurrentUserNickFields {
-    nick: String,
+struct UpdateCurrentUserNickFields<'a> {
+    nick: &'a str,
 }
 
 /// Changes the user's nickname in a guild.
 pub struct UpdateCurrentUserNick<'a> {
-    fields: UpdateCurrentUserNickFields,
+    fields: UpdateCurrentUserNickFields<'a>,
     guild_id: GuildId,
     http: &'a Client,
 }
 
 impl<'a> UpdateCurrentUserNick<'a> {
-    pub(crate) fn new(http: &'a Client, guild_id: GuildId, nick: impl Into<String>) -> Self {
+    pub(crate) const fn new(http: &'a Client, guild_id: GuildId, nick: &'a str) -> Self {
         Self {
-            fields: UpdateCurrentUserNickFields { nick: nick.into() },
+            fields: UpdateCurrentUserNickFields { nick },
             guild_id,
             http,
         }

@@ -1,4 +1,9 @@
-use crate::{client::Client, request::Request, response::ResponseFuture, routing::Route};
+use crate::{
+    client::Client,
+    request::{self, Request},
+    response::ResponseFuture,
+    routing::Route,
+};
 use serde::Serialize;
 use twilight_model::{
     id::GuildId,
@@ -6,13 +11,13 @@ use twilight_model::{
 };
 
 #[derive(Default, Serialize)]
-struct UpdateGuildWelcomeScreenFields {
+struct UpdateGuildWelcomeScreenFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
-    description: Option<String>,
+    description: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     enabled: Option<bool>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    welcome_channels: Vec<WelcomeScreenChannel>,
+    #[serde(skip_serializing_if = "request::slice_is_empty")]
+    welcome_channels: &'a [WelcomeScreenChannel],
 }
 
 /// Update the guild's welcome screen.
@@ -21,7 +26,7 @@ struct UpdateGuildWelcomeScreenFields {
 ///
 /// [`MANAGE_GUILD`]: twilight_model::guild::Permissions::MANAGE_GUILD
 pub struct UpdateGuildWelcomeScreen<'a> {
-    fields: UpdateGuildWelcomeScreenFields,
+    fields: UpdateGuildWelcomeScreenFields<'a>,
     guild_id: GuildId,
     http: &'a Client,
 }
@@ -36,11 +41,7 @@ impl<'a> UpdateGuildWelcomeScreen<'a> {
     }
 
     /// Set the description of the welcome screen.
-    pub fn description(self, description: impl Into<String>) -> Self {
-        self._description(description.into())
-    }
-
-    fn _description(mut self, description: String) -> Self {
+    pub fn description(mut self, description: &'a str) -> Self {
         self.fields.description.replace(description);
 
         self
@@ -54,11 +55,8 @@ impl<'a> UpdateGuildWelcomeScreen<'a> {
     }
 
     /// Set the channels linked in the welcome screen, with associated metadata.
-    pub fn welcome_channels(
-        mut self,
-        welcome_channels: impl IntoIterator<Item = WelcomeScreenChannel>,
-    ) -> Self {
-        self.fields.welcome_channels = welcome_channels.into_iter().collect();
+    pub const fn welcome_channels(mut self, welcome_channels: &'a [WelcomeScreenChannel]) -> Self {
+        self.fields.welcome_channels = welcome_channels;
 
         self
     }

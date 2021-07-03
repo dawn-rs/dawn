@@ -73,7 +73,7 @@ impl<'a> SetCommandPermissions<'a> {
         })
     }
 
-    fn request(&self) -> Result<Request, Error> {
+    fn request(&self) -> Result<Request<'a>, Error> {
         Ok(Request::builder(Route::SetCommandPermissions {
             application_id: self.application_id.0,
             guild_id: self.guild_id.0,
@@ -115,7 +115,7 @@ mod tests {
 
     #[test]
     fn test_correct_validation() {
-        let http = Client::new("token");
+        let http = Client::new("token".to_owned());
 
         let permissions = make_iter().take(4);
 
@@ -126,7 +126,7 @@ mod tests {
 
     #[test]
     fn test_incorrect_validation() {
-        let http = Client::new("token");
+        let http = Client::new("token".to_owned());
 
         let permissions = make_iter().take(11);
 

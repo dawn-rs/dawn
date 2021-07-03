@@ -15,9 +15,7 @@ impl<'a> GetCurrentUser<'a> {
     ///
     /// [`Response`]: crate::response::Response
     pub fn exec(self) -> ResponseFuture<CurrentUser> {
-        let request = Request::from_route(Route::GetUser {
-            target_user: "@me".to_owned(),
-        });
+        let request = Request::from_route(Route::GetCurrentUser);
 
         self.http.request(request)
     }

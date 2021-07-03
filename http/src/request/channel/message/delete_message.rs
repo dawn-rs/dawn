@@ -11,7 +11,7 @@ pub struct DeleteMessage<'a> {
     channel_id: ChannelId,
     http: &'a Client,
     message_id: MessageId,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 impl<'a> DeleteMessage<'a> {
@@ -50,10 +50,9 @@ impl<'a> DeleteMessage<'a> {
     }
 }
 
-impl<'a> AuditLogReason for DeleteMessage<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for DeleteMessage<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }

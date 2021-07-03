@@ -43,7 +43,7 @@ impl GetAuditLogError {
 impl Display for GetAuditLogError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match &self.kind {
-            GetAuditLogErrorType::LimitInvalid { .. } => f.write_str("the limit is invalid"),
+            GetAuditLogErrorType::LimitInvalid => f.write_str("the limit is invalid"),
         }
     }
 }
@@ -55,10 +55,7 @@ impl Error for GetAuditLogError {}
 #[non_exhaustive]
 pub enum GetAuditLogErrorType {
     /// The limit is either 0 or more than 100.
-    LimitInvalid {
-        /// Provided maximum number of audit logs to get.
-        limit: u64,
-    },
+    LimitInvalid,
 }
 
 #[derive(Default)]
@@ -79,7 +76,7 @@ struct GetAuditLogFields {
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("token");
+/// let client = Client::new("token".to_owned());
 ///
 /// let guild_id = GuildId(101);
 /// let audit_log = client
@@ -129,7 +126,7 @@ impl<'a> GetAuditLog<'a> {
     pub fn limit(mut self, limit: u64) -> Result<Self, GetAuditLogError> {
         if !validate::get_audit_log_limit(limit) {
             return Err(GetAuditLogError {
-                kind: GetAuditLogErrorType::LimitInvalid { limit },
+                kind: GetAuditLogErrorType::LimitInvalid,
             });
         }
 

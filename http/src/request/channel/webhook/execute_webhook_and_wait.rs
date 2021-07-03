@@ -13,7 +13,7 @@ use twilight_model::channel::Message;
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 /// let id = WebhookId(432);
 ///
 /// let message = client

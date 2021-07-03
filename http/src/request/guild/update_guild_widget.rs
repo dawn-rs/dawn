@@ -35,8 +35,7 @@ impl<'a> UpdateGuildWidget<'a> {
     }
 
     /// Set which channel to display on the widget.
-    pub fn channel_id(mut self, channel_id: impl Into<Option<ChannelId>>) -> Self {
-        let channel_id = channel_id.into();
+    pub fn channel_id(mut self, channel_id: Option<ChannelId>) -> Self {
         self.fields
             .channel_id
             .replace(NullableField::from_option(channel_id));

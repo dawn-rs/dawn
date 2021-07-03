@@ -8,10 +8,10 @@ use serde::Serialize;
 use twilight_model::{channel::Webhook, id::ChannelId};
 
 #[derive(Serialize)]
-struct CreateWebhookFields {
+struct CreateWebhookFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
-    avatar: Option<String>,
-    name: String,
+    avatar: Option<&'a str>,
+    name: &'a str,
 }
 
 /// Create a webhook in a channel.
@@ -24,7 +24,7 @@ struct CreateWebhookFields {
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 /// let channel_id = ChannelId(123);
 ///
 /// let webhook = client
@@ -35,19 +35,16 @@ struct CreateWebhookFields {
 /// ```
 pub struct CreateWebhook<'a> {
     channel_id: ChannelId,
-    fields: CreateWebhookFields,
+    fields: CreateWebhookFields<'a>,
     http: &'a Client,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 impl<'a> CreateWebhook<'a> {
-    pub(crate) fn new(http: &'a Client, channel_id: ChannelId, name: impl Into<String>) -> Self {
+    pub(crate) const fn new(http: &'a Client, channel_id: ChannelId, name: &'a str) -> Self {
         Self {
             channel_id,
-            fields: CreateWebhookFields {
-                avatar: None,
-                name: name.into(),
-            },
+            fields: CreateWebhookFields { avatar: None, name },
             http,
             reason: None,
         }
@@ -60,8 +57,8 @@ impl<'a> CreateWebhook<'a> {
     /// for more information.
     ///
     /// [the discord docs]: https://discord.com/developers/docs/reference#image-data
-    pub fn avatar(mut self, avatar: impl Into<String>) -> Self {
-        self.fields.avatar.replace(avatar.into());
+    pub fn avatar(mut self, avatar: &'a str) -> Self {
+        self.fields.avatar.replace(avatar);
 
         self
     }
@@ -92,10 +89,9 @@ impl<'a> CreateWebhook<'a> {
     }
 }
 
-impl<'a> AuditLogReason for CreateWebhook<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for CreateWebhook<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }

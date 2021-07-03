@@ -14,7 +14,10 @@ use crate::{
             SetGuildCommands, UpdateCommandPermissions, UpdateFollowupMessage, UpdateGlobalCommand,
             UpdateGuildCommand, UpdateOriginalResponse,
         },
-        channel::stage::create_stage_instance::CreateStageInstanceError,
+        channel::{
+            reaction::delete_reaction::TargetUser,
+            stage::create_stage_instance::CreateStageInstanceError,
+        },
         guild::{
             create_guild::CreateGuildError, create_guild_channel::CreateGuildChannelError,
             update_guild_channel_positions::Position,
@@ -127,11 +130,12 @@ impl Debug for State {
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 /// # Ok(()) }
 /// ```
 ///
-/// Use [`ClientBuilder`] to create a client called `client`, with a shorter timeout:
+/// Use [`ClientBuilder`] to create a client called `client`, with a shorter
+/// timeout:
 /// ```rust,no_run
 /// use twilight_http::Client;
 /// use std::time::Duration;
@@ -139,7 +143,7 @@ impl Debug for State {
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let client = Client::builder()
-///     .token("my token")
+///     .token("my token".to_owned())
 ///     .timeout(Duration::from_secs(5))
 ///     .build();
 /// # Ok(()) }
@@ -157,7 +161,7 @@ pub struct Client {
 impl Client {
     /// Create a new `hyper-rustls` or `hyper-tls` backed client with a token.
     #[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
-    pub fn new(token: impl Into<String>) -> Self {
+    pub fn new(token: String) -> Self {
         ClientBuilder::default().token(token).build()
     }
 
@@ -226,7 +230,7 @@ impl Client {
     ///
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("token");
+    /// # let client = Client::new("token".to_owned());
     /// let guild_id = GuildId(101);
     /// let audit_log = client
     /// // not done
@@ -251,7 +255,7 @@ impl Client {
     /// #
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("my token");
+    /// # let client = Client::new("my token".to_owned());
     /// #
     /// let guild_id = GuildId(1);
     ///
@@ -283,7 +287,7 @@ impl Client {
     /// #
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("my token");
+    /// # let client = Client::new("my token".to_owned());
     /// #
     /// let guild_id = GuildId(100);
     /// let user_id = UserId(200);
@@ -310,7 +314,7 @@ impl Client {
     /// #
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("my token");
+    /// # let client = Client::new("my token".to_owned());
     /// #
     /// let guild_id = GuildId(100);
     /// let user_id = UserId(200);
@@ -334,7 +338,7 @@ impl Client {
     /// #
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("my token");
+    /// # let client = Client::new("my token".to_owned());
     /// #
     /// let channel_id = ChannelId(100);
     /// #
@@ -397,7 +401,7 @@ impl Client {
     ///
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = Client::new("my token");
+    /// let client = Client::new("my token".to_owned());
     /// let channel_id = ChannelId(123);
     /// let message_id = MessageId(234);
     /// let limit: u64 = 6;
@@ -447,7 +451,7 @@ impl Client {
     /// #
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("my token");
+    /// # let client = Client::new("my token".to_owned());
     ///
     /// let channel_id = ChannelId(123);
     /// let allow = Permissions::VIEW_CHANNEL;
@@ -528,7 +532,7 @@ impl Client {
     ///
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("my token");
+    /// # let client = Client::new("my token".to_owned());
     /// #
     /// let after = GuildId(300);
     /// let before = GuildId(400);
@@ -545,11 +549,11 @@ impl Client {
     }
 
     /// Changes the user's nickname in a guild.
-    pub fn update_current_user_nick(
-        &self,
+    pub const fn update_current_user_nick<'a>(
+        &'a self,
         guild_id: GuildId,
-        nick: impl Into<String>,
-    ) -> UpdateCurrentUserNick<'_> {
+        nick: &'a str,
+    ) -> UpdateCurrentUserNick<'a> {
         UpdateCurrentUserNick::new(self, guild_id, nick)
     }
 
@@ -565,7 +569,7 @@ impl Client {
     /// #
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("my token");
+    /// # let client = Client::new("my token".to_owned());
     /// #
     /// let guild_id = GuildId(100);
     ///
@@ -588,7 +592,7 @@ impl Client {
     /// #
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("my token");
+    /// # let client = Client::new("my token".to_owned());
     /// #
     /// let guild_id = GuildId(50);
     /// let emoji_id = EmojiId(100);
@@ -607,12 +611,12 @@ impl Client {
     /// discord docs] for more information about image data.
     ///
     /// [the discord docs]: https://discord.com/developers/docs/reference#image-data
-    pub fn create_emoji(
-        &self,
+    pub const fn create_emoji<'a>(
+        &'a self,
         guild_id: GuildId,
-        name: impl Into<String>,
-        image: impl Into<String>,
-    ) -> CreateEmoji<'_> {
+        name: &'a str,
+        image: &'a str,
+    ) -> CreateEmoji<'a> {
         CreateEmoji::new(self, guild_id, name, image)
     }
 
@@ -638,7 +642,7 @@ impl Client {
     /// #
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("my token");
+    /// # let client = Client::new("my token".to_owned());
     /// #
     /// let info = client.gateway().exec().await?;
     /// # Ok(()) }
@@ -652,7 +656,7 @@ impl Client {
     /// #
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("my token");
+    /// # let client = Client::new("my token".to_owned());
     /// #
     /// let info = client.gateway().authed().exec().await?.model().await?;
     ///
@@ -680,10 +684,7 @@ impl Client {
     /// length is too short or too long.
     ///
     /// [`CreateGuildErrorType::NameInvalid`]: crate::request::guild::create_guild::CreateGuildErrorType::NameInvalid
-    pub fn create_guild(
-        &self,
-        name: impl Into<String>,
-    ) -> Result<CreateGuild<'_>, CreateGuildError> {
+    pub fn create_guild(&self, name: String) -> Result<CreateGuild<'_>, CreateGuildError> {
         CreateGuild::new(self, name)
     }
 
@@ -730,11 +731,11 @@ impl Client {
     /// [`CreateGuildChannelErrorType::NameInvalid`]: crate::request::guild::create_guild_channel::CreateGuildChannelErrorType::NameInvalid
     /// [`CreateGuildChannelErrorType::RateLimitPerUserInvalid`]: crate::request::guild::create_guild_channel::CreateGuildChannelErrorType::RateLimitPerUserInvalid
     /// [`CreateGuildChannelErrorType::TopicInvalid`]: crate::request::guild::create_guild_channel::CreateGuildChannelErrorType::TopicInvalid
-    pub fn create_guild_channel(
-        &self,
+    pub fn create_guild_channel<'a>(
+        &'a self,
         guild_id: GuildId,
-        name: impl Into<String>,
-    ) -> Result<CreateGuildChannel<'_>, CreateGuildChannelError> {
+        name: &'a str,
+    ) -> Result<CreateGuildChannel<'a>, CreateGuildChannelError> {
         CreateGuildChannel::new(self, guild_id, name)
     }
 
@@ -744,11 +745,11 @@ impl Client {
     ///
     /// This function accepts an `Iterator` of `(ChannelId, u64)`. It also
     /// accepts an `Iterator` of `Position`, which has extra fields.
-    pub fn update_guild_channel_positions(
-        &self,
+    pub const fn update_guild_channel_positions<'a>(
+        &'a self,
         guild_id: GuildId,
-        channel_positions: impl Iterator<Item = impl Into<Position>>,
-    ) -> UpdateGuildChannelPositions<'_> {
+        channel_positions: &'a [Position],
+    ) -> UpdateGuildChannelPositions<'a> {
         UpdateGuildChannelPositions::new(self, guild_id, channel_positions)
     }
 
@@ -804,7 +805,7 @@ impl Client {
     /// #
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("my token");
+    /// # let client = Client::new("my token".to_owned());
     /// #
     /// let guild_id = GuildId(100);
     /// let user_id = UserId(3000);
@@ -836,10 +837,10 @@ impl Client {
     ///
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = Client::new("my token");
+    /// let client = Client::new("my token".to_owned());
     ///
     /// let guild_id = GuildId(100);
-    /// let members = client.search_guild_members(guild_id, String::from("Wumpus"))
+    /// let members = client.search_guild_members(guild_id, "Wumpus")
     ///     .limit(10)?
     ///     .exec()
     ///     .await?;
@@ -852,12 +853,12 @@ impl Client {
     /// the limit is invalid.
     ///
     /// [`GUILD_MEMBERS`]: ../../twilight_model/gateway/struct.Intents.html#associatedconstant.GUILD_MEMBERS
-    /// [`SearchGuildMembersErrorType::LimitInvalid`]: ../request/guild/member/search_guild_members/enum.SearchGuildMembersError.html#variant.LimitInvalid
-    pub fn search_guild_members(
-        &self,
+    /// [`SearchGuildMembersErrorType::LimitInvalid`]: ../request/guild/member/search_guild_members/enum.SearchGuildMembersErrorType.html#variant.LimitInvalid
+    pub const fn search_guild_members<'a>(
+        &'a self,
         guild_id: GuildId,
-        query: impl Into<String>,
-    ) -> SearchGuildMembers<'_> {
+        query: &'a str,
+    ) -> SearchGuildMembers<'a> {
         SearchGuildMembers::new(self, guild_id, query)
     }
 
@@ -880,12 +881,12 @@ impl Client {
     /// [`AddGuildMemberErrorType::NickNameInvalid`]: crate::request::guild::member::add_guild_member::AddGuildMemberErrorType::NicknameInvalid
     ///
     /// [the discord docs]: https://discord.com/developers/docs/resources/guild#add-guild-member
-    pub fn add_guild_member(
-        &self,
+    pub const fn add_guild_member<'a>(
+        &'a self,
         guild_id: GuildId,
         user_id: UserId,
-        access_token: impl Into<String>,
-    ) -> AddGuildMember<'_> {
+        access_token: &'a str,
+    ) -> AddGuildMember<'a> {
         AddGuildMember::new(self, guild_id, user_id, access_token)
     }
 
@@ -915,7 +916,7 @@ impl Client {
     /// let client = Client::new(env::var("DISCORD_TOKEN")?);
     /// let member = client.update_guild_member(GuildId(1), UserId(2))
     ///     .mute(true)
-    ///     .nick(Some("pinkie pie".to_owned()))?
+    ///     .nick(Some("pinkie pie"))?
     ///     .exec()
     ///     .await?
     ///     .model()
@@ -949,7 +950,7 @@ impl Client {
     /// #
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("my token");
+    /// # let client = Client::new("my token".to_owned());
     /// #
     /// let guild_id = GuildId(1);
     /// let role_id = RoleId(2);
@@ -961,7 +962,7 @@ impl Client {
     ///     .await?;
     /// # Ok(()) }
     /// ```
-    pub fn add_guild_member_role(
+    pub const fn add_guild_member_role(
         &self,
         guild_id: GuildId,
         user_id: UserId,
@@ -971,7 +972,7 @@ impl Client {
     }
 
     /// Remove a role from a member in a guild, by id.
-    pub fn remove_guild_member_role(
+    pub const fn remove_guild_member_role(
         &self,
         guild_id: GuildId,
         user_id: UserId,
@@ -1045,7 +1046,7 @@ impl Client {
     /// #
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("my token");
+    /// # let client = Client::new("my token".to_owned());
     /// #
     /// let invite = client
     ///     .invite("code")
@@ -1057,7 +1058,7 @@ impl Client {
     ///
     /// [`with_counts`]: crate::request::channel::invite::GetInvite::with_counts
     /// [`with_expiration`]: crate::request::channel::invite::GetInvite::with_expiration
-    pub fn invite(&self, code: impl Into<String>) -> GetInvite<'_> {
+    pub fn invite<'a>(&'a self, code: &'a str) -> GetInvite<'a> {
         GetInvite::new(self, code)
     }
 
@@ -1073,7 +1074,7 @@ impl Client {
     /// #
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("my token");
+    /// # let client = Client::new("my token".to_owned());
     /// #
     /// let channel_id = ChannelId(123);
     /// let invite = client
@@ -1096,7 +1097,7 @@ impl Client {
     ///
     /// [`MANAGE_CHANNELS`]: twilight_model::guild::Permissions::MANAGE_CHANNELS
     /// [`MANAGE_GUILD`]: twilight_model::guild::Permissions::MANAGE_GUILD
-    pub fn delete_invite(&self, code: impl Into<String>) -> DeleteInvite<'_> {
+    pub const fn delete_invite<'a>(&'a self, code: &'a str) -> DeleteInvite<'a> {
         DeleteInvite::new(self, code)
     }
 
@@ -1115,7 +1116,7 @@ impl Client {
     /// #
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("my token");
+    /// # let client = Client::new("my token".to_owned());
     /// #
     /// let channel_id = ChannelId(123);
     /// let message = client
@@ -1133,12 +1134,12 @@ impl Client {
     /// [`CreateMessageErrorType::ContentInvalid`] if the content is over 2000
     /// UTF-16 characters.
     ///
-    /// The method [`embed`] returns
+    /// The method [`embeds`] returns
     /// [`CreateMessageErrorType::EmbedTooLarge`] if the length of the embed
     /// is over 6000 characters.
     ///
     /// [`content`]: crate::request::channel::message::create_message::CreateMessage::content
-    /// [`embed`]: crate::request::channel::message::create_message::CreateMessage::embed
+    /// [`embeds`]: crate::request::channel::message::create_message::CreateMessage::embeds
     /// [`CreateMessageErrorType::ContentInvalid`]:
     /// crate::request::channel::message::create_message::CreateMessageErrorType::ContentInvalid
     /// [`CreateMessageErrorType::EmbedTooLarge`]:
@@ -1163,11 +1164,11 @@ impl Client {
     /// than two weeks. Refer to [the discord docs] for more information.
     ///
     /// [the discord docs]: https://discord.com/developers/docs/resources/channel#bulk-delete-messages
-    pub fn delete_messages(
-        &self,
+    pub const fn delete_messages<'a>(
+        &'a self,
         channel_id: ChannelId,
-        message_ids: impl Into<Vec<MessageId>>,
-    ) -> DeleteMessages<'_> {
+        message_ids: &'a [MessageId],
+    ) -> DeleteMessages<'a> {
         DeleteMessages::new(self, channel_id, message_ids)
     }
 
@@ -1187,9 +1188,9 @@ impl Client {
     ///
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = Client::new("my token");
+    /// let client = Client::new("my token".to_owned());
     /// client.update_message(ChannelId(1), MessageId(2))
-    ///     .content("test update".to_owned())?
+    ///     .content(Some("test update"))?
     ///     .exec()
     ///     .await?;
     /// # Ok(()) }
@@ -1203,7 +1204,7 @@ impl Client {
     /// #
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("my token");
+    /// # let client = Client::new("my token".to_owned());
     /// client.update_message(ChannelId(1), MessageId(2))
     ///     .content(None)?
     ///     .exec()
@@ -1248,12 +1249,12 @@ impl Client {
     ///
     /// This endpoint is limited to 100 users maximum, so if a message has more than 100 reactions,
     /// requests must be chained until all reactions are retireved.
-    pub fn reactions(
-        &self,
+    pub fn reactions<'a>(
+        &'a self,
         channel_id: ChannelId,
         message_id: MessageId,
-        emoji: RequestReactionType,
-    ) -> GetReactions<'_> {
+        emoji: &'a RequestReactionType<'a>,
+    ) -> GetReactions<'a> {
         GetReactions::new(self, channel_id, message_id, emoji)
     }
 
@@ -1270,55 +1271,55 @@ impl Client {
     /// #
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("my token");
+    /// # let client = Client::new("my token".to_owned());
     /// #
     /// let channel_id = ChannelId(123);
     /// let message_id = MessageId(456);
-    /// let emoji = RequestReactionType::Unicode { name: String::from("🌃") };
+    /// let emoji = RequestReactionType::Unicode { name: "🌃" };
     ///
     /// let reaction = client
-    ///     .create_reaction(channel_id, message_id, emoji)
+    ///     .create_reaction(channel_id, message_id, &emoji)
     ///     .exec()
     ///     .await?;
     /// # Ok(()) }
     /// ```
-    pub const fn create_reaction(
-        &self,
+    pub const fn create_reaction<'a>(
+        &'a self,
         channel_id: ChannelId,
         message_id: MessageId,
-        emoji: RequestReactionType,
-    ) -> CreateReaction<'_> {
+        emoji: &'a RequestReactionType<'a>,
+    ) -> CreateReaction<'a> {
         CreateReaction::new(self, channel_id, message_id, emoji)
     }
 
     /// Delete the current user's (`@me`) reaction on a message.
-    pub fn delete_current_user_reaction(
-        &self,
+    pub const fn delete_current_user_reaction<'a>(
+        &'a self,
         channel_id: ChannelId,
         message_id: MessageId,
-        emoji: RequestReactionType,
-    ) -> DeleteReaction<'_> {
-        DeleteReaction::new(self, channel_id, message_id, emoji, "@me")
+        emoji: &'a RequestReactionType<'a>,
+    ) -> DeleteReaction<'a> {
+        DeleteReaction::new(self, channel_id, message_id, emoji, TargetUser::Current)
     }
 
     /// Delete a reaction by a user on a message.
-    pub fn delete_reaction(
-        &self,
+    pub const fn delete_reaction<'a>(
+        &'a self,
         channel_id: ChannelId,
         message_id: MessageId,
-        emoji: RequestReactionType,
+        emoji: &'a RequestReactionType<'a>,
         user_id: UserId,
-    ) -> DeleteReaction<'_> {
-        DeleteReaction::new(self, channel_id, message_id, emoji, user_id.to_string())
+    ) -> DeleteReaction<'a> {
+        DeleteReaction::new(self, channel_id, message_id, emoji, TargetUser::Id(user_id))
     }
 
     /// Remove all reactions on a message of an emoji.
-    pub const fn delete_all_reaction(
-        &self,
+    pub const fn delete_all_reaction<'a>(
+        &'a self,
         channel_id: ChannelId,
         message_id: MessageId,
-        emoji: RequestReactionType,
-    ) -> DeleteAllReaction<'_> {
+        emoji: &'a RequestReactionType<'a>,
+    ) -> DeleteAllReaction<'a> {
         DeleteAllReaction::new(self, channel_id, message_id, emoji)
     }
 
@@ -1358,7 +1359,7 @@ impl Client {
     ///
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("my token");
+    /// # let client = Client::new("my token".to_owned());
     /// let guild_id = GuildId(234);
     ///
     /// client.create_role(guild_id)
@@ -1385,11 +1386,11 @@ impl Client {
     /// Modify the position of the roles.
     ///
     /// The minimum amount of roles to modify, is a swap between two roles.
-    pub fn update_role_positions(
-        &self,
+    pub const fn update_role_positions<'a>(
+        &'a self,
         guild_id: GuildId,
-        roles: impl Iterator<Item = (RoleId, u64)>,
-    ) -> UpdateRolePositions<'_> {
+        roles: &'a [(RoleId, u64)],
+    ) -> UpdateRolePositions<'a> {
         UpdateRolePositions::new(self, guild_id, roles)
     }
 
@@ -1403,11 +1404,11 @@ impl Client {
     /// topic is not between 1 and 120 characters in length.
     ///
     /// [`InvalidTopic`]: crate::request::channel::stage::create_stage_instance::CreateStageInstanceErrorType::InvalidTopic
-    pub fn create_stage_instance(
-        &self,
+    pub fn create_stage_instance<'a>(
+        &'a self,
         channel_id: ChannelId,
-        topic: impl Into<String>,
-    ) -> Result<CreateStageInstance<'_>, CreateStageInstanceError> {
+        topic: &'a str,
+    ) -> Result<CreateStageInstance<'a>, CreateStageInstanceError> {
         CreateStageInstance::new(self, channel_id, topic)
     }
 
@@ -1440,11 +1441,11 @@ impl Client {
     /// if the name is invalid.
     ///
     /// [`CreateGuildFromTemplateErrorType::NameInvalid`]: crate::request::template::create_guild_from_template::CreateGuildFromTemplateErrorType::NameInvalid
-    pub fn create_guild_from_template(
-        &self,
-        template_code: impl Into<String>,
-        name: impl Into<String>,
-    ) -> Result<CreateGuildFromTemplate<'_>, CreateGuildFromTemplateError> {
+    pub fn create_guild_from_template<'a>(
+        &'a self,
+        template_code: &'a str,
+        name: &'a str,
+    ) -> Result<CreateGuildFromTemplate<'a>, CreateGuildFromTemplateError> {
         CreateGuildFromTemplate::new(self, template_code, name)
     }
 
@@ -1459,25 +1460,25 @@ impl Client {
     /// name is invalid.
     ///
     /// [`CreateTemplateErrorType::NameInvalid`]: crate::request::template::create_template::CreateTemplateErrorType::NameInvalid
-    pub fn create_template(
-        &self,
+    pub fn create_template<'a>(
+        &'a self,
         guild_id: GuildId,
-        name: impl Into<String>,
-    ) -> Result<CreateTemplate<'_>, CreateTemplateError> {
+        name: &'a str,
+    ) -> Result<CreateTemplate<'a>, CreateTemplateError> {
         CreateTemplate::new(self, guild_id, name)
     }
 
     /// Delete a template by ID and code.
-    pub fn delete_template(
-        &self,
+    pub const fn delete_template<'a>(
+        &'a self,
         guild_id: GuildId,
-        template_code: impl Into<String>,
-    ) -> DeleteTemplate<'_> {
+        template_code: &'a str,
+    ) -> DeleteTemplate<'a> {
         DeleteTemplate::new(self, guild_id, template_code)
     }
 
     /// Get a template by its code.
-    pub fn get_template(&self, template_code: impl Into<String>) -> GetTemplate<'_> {
+    pub const fn get_template<'a>(&'a self, template_code: &'a str) -> GetTemplate<'a> {
         GetTemplate::new(self, template_code)
     }
 
@@ -1487,26 +1488,26 @@ impl Client {
     }
 
     /// Sync a template to the current state of the guild, by ID and code.
-    pub fn sync_template(
-        &self,
+    pub const fn sync_template<'a>(
+        &'a self,
         guild_id: GuildId,
-        template_code: impl Into<String>,
-    ) -> SyncTemplate<'_> {
+        template_code: &'a str,
+    ) -> SyncTemplate<'a> {
         SyncTemplate::new(self, guild_id, template_code)
     }
 
     /// Update the template's metadata, by ID and code.
-    pub fn update_template(
-        &self,
+    pub const fn update_template<'a>(
+        &'a self,
         guild_id: GuildId,
-        template_code: impl Into<String>,
-    ) -> UpdateTemplate<'_> {
+        template_code: &'a str,
+    ) -> UpdateTemplate<'a> {
         UpdateTemplate::new(self, guild_id, template_code)
     }
 
     /// Get a user's information by id.
-    pub fn user(&self, user_id: UserId) -> GetUser<'_> {
-        GetUser::new(self, user_id.to_string())
+    pub const fn user(&self, user_id: UserId) -> GetUser<'_> {
+        GetUser::new(self, user_id)
     }
 
     /// Update another user's voice state.
@@ -1544,7 +1545,7 @@ impl Client {
     /// #
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("my token");
+    /// # let client = Client::new("my token".to_owned());
     /// let channel_id = ChannelId(123);
     ///
     /// let webhook = client
@@ -1553,11 +1554,11 @@ impl Client {
     ///     .await?;
     /// # Ok(()) }
     /// ```
-    pub fn create_webhook(
-        &self,
+    pub const fn create_webhook<'a>(
+        &'a self,
         channel_id: ChannelId,
-        name: impl Into<String>,
-    ) -> CreateWebhook<'_> {
+        name: &'a str,
+    ) -> CreateWebhook<'a> {
         CreateWebhook::new(self, channel_id, name)
     }
 
@@ -1572,17 +1573,17 @@ impl Client {
     }
 
     /// Update a webhook, with a token, by ID.
-    pub fn update_webhook_with_token(
-        &self,
+    pub fn update_webhook_with_token<'a>(
+        &'a self,
         webhook_id: WebhookId,
-        token: impl Into<String>,
-    ) -> UpdateWebhookWithToken<'_> {
+        token: &'a str,
+    ) -> UpdateWebhookWithToken<'a> {
         UpdateWebhookWithToken::new(self, webhook_id, token)
     }
 
     /// Executes a webhook, sending a message to its channel.
     ///
-    /// You can only specify one of [`content`], [`embeds`], or [`file`].
+    /// You can only specify one of [`content`], [`embeds`], or [`files`].
     ///
     /// # Examples
     ///
@@ -1592,7 +1593,7 @@ impl Client {
     /// #
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("my token");
+    /// # let client = Client::new("my token".to_owned());
     /// let id = WebhookId(432);
     /// #
     /// let webhook = client
@@ -1605,12 +1606,12 @@ impl Client {
     ///
     /// [`content`]: crate::request::channel::webhook::ExecuteWebhook::content
     /// [`embeds`]: crate::request::channel::webhook::ExecuteWebhook::embeds
-    /// [`file`]: crate::request::channel::webhook::ExecuteWebhook::file
-    pub fn execute_webhook(
-        &self,
+    /// [`files`]: crate::request::channel::webhook::ExecuteWebhook::files
+    pub fn execute_webhook<'a>(
+        &'a self,
         webhook_id: WebhookId,
-        token: impl Into<String>,
-    ) -> ExecuteWebhook<'_> {
+        token: &'a str,
+    ) -> ExecuteWebhook<'a> {
         ExecuteWebhook::new(self, webhook_id, token)
     }
 
@@ -1618,12 +1619,12 @@ impl Client {
     ///
     /// [`WebhookId`]: twilight_model::id::WebhookId
     /// [`MessageId`]: twilight_model::id::MessageId
-    pub fn webhook_message(
-        &self,
+    pub const fn webhook_message<'a>(
+        &'a self,
         webhook_id: WebhookId,
-        token: impl Into<String>,
+        token: &'a str,
         message_id: MessageId,
-    ) -> GetWebhookMessage<'_> {
+    ) -> GetWebhookMessage<'a> {
         GetWebhookMessage::new(self, webhook_id, token, message_id)
     }
 
@@ -1637,19 +1638,19 @@ impl Client {
     ///
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("token");
+    /// # let client = Client::new("token".to_owned());
     /// client.update_webhook_message(WebhookId(1), "token here", MessageId(2))
-    ///     .content(Some("new message content".to_owned()))?
+    ///     .content(Some("new message content"))?
     ///     .exec()
     ///     .await?;
     /// # Ok(()) }
     /// ```
-    pub fn update_webhook_message(
-        &self,
+    pub fn update_webhook_message<'a>(
+        &'a self,
         webhook_id: WebhookId,
-        token: impl Into<String>,
+        token: &'a str,
         message_id: MessageId,
-    ) -> UpdateWebhookMessage<'_> {
+    ) -> UpdateWebhookMessage<'a> {
         UpdateWebhookMessage::new(self, webhook_id, token, message_id)
     }
 
@@ -1663,29 +1664,29 @@ impl Client {
     ///
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("token");
+    /// # let client = Client::new("token".to_owned());
     /// client
     ///     .delete_webhook_message(WebhookId(1), "token here", MessageId(2))
     ///     .exec()
     ///     .await?;
     /// # Ok(()) }
     /// ```
-    pub fn delete_webhook_message(
-        &self,
+    pub const fn delete_webhook_message<'a>(
+        &'a self,
         webhook_id: WebhookId,
-        token: impl Into<String>,
+        token: &'a str,
         message_id: MessageId,
-    ) -> DeleteWebhookMessage<'_> {
+    ) -> DeleteWebhookMessage<'a> {
         DeleteWebhookMessage::new(self, webhook_id, token, message_id)
     }
 
     /// Respond to an interaction, by ID and token.
-    pub fn interaction_callback(
-        &self,
+    pub const fn interaction_callback<'a>(
+        &'a self,
         interaction_id: InteractionId,
-        interaction_token: impl Into<String>,
+        interaction_token: &'a str,
         response: InteractionResponse,
-    ) -> InteractionCallback<'_> {
+    ) -> InteractionCallback<'a> {
         InteractionCallback::new(self, interaction_id, interaction_token, response)
     }
 
@@ -1696,10 +1697,10 @@ impl Client {
     /// Returns an [`InteractionErrorType::ApplicationIdNotPresent`]
     /// error type if an application ID has not been configured via
     /// [`Client::set_application_id`].
-    pub fn update_interaction_original(
-        &self,
-        interaction_token: impl Into<String>,
-    ) -> Result<UpdateOriginalResponse<'_>, InteractionError> {
+    pub fn update_interaction_original<'a>(
+        &'a self,
+        interaction_token: &'a str,
+    ) -> Result<UpdateOriginalResponse<'a>, InteractionError> {
         let application_id = self.application_id().ok_or(InteractionError {
             kind: InteractionErrorType::ApplicationIdNotPresent,
         })?;
@@ -1718,10 +1719,10 @@ impl Client {
     /// Returns an [`InteractionErrorType::ApplicationIdNotPresent`]
     /// error type if an application ID has not been configured via
     /// [`Client::set_application_id`].
-    pub fn delete_interaction_original(
-        &self,
-        interaction_token: impl Into<String>,
-    ) -> Result<DeleteOriginalResponse<'_>, InteractionError> {
+    pub fn delete_interaction_original<'a>(
+        &'a self,
+        interaction_token: &'a str,
+    ) -> Result<DeleteOriginalResponse<'a>, InteractionError> {
         let application_id = self.application_id().ok_or(InteractionError {
             kind: InteractionErrorType::ApplicationIdNotPresent,
         })?;
@@ -1740,10 +1741,10 @@ impl Client {
     /// Returns an [`InteractionErrorType::ApplicationIdNotPresent`]
     /// error type if an application ID has not been configured via
     /// [`Client::set_application_id`].
-    pub fn create_followup_message(
-        &self,
-        interaction_token: impl Into<String>,
-    ) -> Result<CreateFollowupMessage<'_>, InteractionError> {
+    pub fn create_followup_message<'a>(
+        &'a self,
+        interaction_token: &'a str,
+    ) -> Result<CreateFollowupMessage<'a>, InteractionError> {
         let application_id = self.application_id().ok_or(InteractionError {
             kind: InteractionErrorType::ApplicationIdNotPresent,
         })?;
@@ -1762,11 +1763,11 @@ impl Client {
     /// Returns an [`InteractionErrorType::ApplicationIdNotPresent`]
     /// error type if an application ID has not been configured via
     /// [`Client::set_application_id`].
-    pub fn update_followup_message(
-        &self,
-        interaction_token: impl Into<String>,
+    pub fn update_followup_message<'a>(
+        &'a self,
+        interaction_token: &'a str,
         message_id: MessageId,
-    ) -> Result<UpdateFollowupMessage<'_>, InteractionError> {
+    ) -> Result<UpdateFollowupMessage<'a>, InteractionError> {
         let application_id = self.application_id().ok_or(InteractionError {
             kind: InteractionErrorType::ApplicationIdNotPresent,
         })?;
@@ -1786,11 +1787,11 @@ impl Client {
     /// Returns an [`InteractionErrorType::ApplicationIdNotPresent`]
     /// error type if an application ID has not been configured via
     /// [`Client::set_application_id`].
-    pub fn delete_followup_message(
-        &self,
-        interaction_token: impl Into<String>,
+    pub fn delete_followup_message<'a>(
+        &'a self,
+        interaction_token: &'a str,
         message_id: MessageId,
-    ) -> Result<DeleteFollowupMessage<'_>, InteractionError> {
+    ) -> Result<DeleteFollowupMessage<'a>, InteractionError> {
         let application_id = self.application_id().ok_or(InteractionError {
             kind: InteractionErrorType::ApplicationIdNotPresent,
         })?;
@@ -1828,8 +1829,8 @@ impl Client {
     pub fn create_guild_command(
         &self,
         guild_id: GuildId,
-        name: impl Into<String>,
-        description: impl Into<String>,
+        name: String,
+        description: String,
     ) -> Result<CreateGuildCommand<'_>, InteractionError> {
         let application_id = self.application_id().ok_or(InteractionError {
             kind: InteractionErrorType::ApplicationIdNotPresent,
@@ -1919,11 +1920,11 @@ impl Client {
     /// Returns an [`InteractionErrorType::ApplicationIdNotPresent`]
     /// error type if an application ID has not been configured via
     /// [`Client::set_application_id`].
-    pub fn set_guild_commands(
-        &self,
+    pub fn set_guild_commands<'a>(
+        &'a self,
         guild_id: GuildId,
-        commands: Vec<Command>,
-    ) -> Result<SetGuildCommands<'_>, InteractionError> {
+        commands: &'a [Command],
+    ) -> Result<SetGuildCommands<'a>, InteractionError> {
         let application_id = self.application_id().ok_or(InteractionError {
             kind: InteractionErrorType::ApplicationIdNotPresent,
         })?;
@@ -2035,10 +2036,10 @@ impl Client {
     /// Returns an [`InteractionErrorType::ApplicationIdNotPresent`]
     /// error type if an application ID has not been configured via
     /// [`Client::set_application_id`].
-    pub fn set_global_commands(
-        &self,
-        commands: Vec<Command>,
-    ) -> Result<SetGlobalCommands<'_>, InteractionError> {
+    pub fn set_global_commands<'a>(
+        &'a self,
+        commands: &'a [Command],
+    ) -> Result<SetGlobalCommands<'a>, InteractionError> {
         let application_id = self.application_id().ok_or(InteractionError {
             kind: InteractionErrorType::ApplicationIdNotPresent,
         })?;
@@ -2147,7 +2148,7 @@ impl Client {
     /// token has become invalid due to expiration, revokation, etc.
     ///
     /// [`Response`]: super::response::Response
-    pub fn request<T>(&self, request: Request) -> ResponseFuture<T> {
+    pub fn request<T>(&self, request: Request<'_>) -> ResponseFuture<T> {
         match self.try_request::<T>(request) {
             Ok(future) => future,
             Err(source) => ResponseFuture::error(source),
@@ -2155,7 +2156,7 @@ impl Client {
     }
 
     #[allow(clippy::too_many_lines)]
-    fn try_request<T>(&self, request: Request) -> Result<ResponseFuture<T>, Error> {
+    fn try_request<T>(&self, request: Request<'_>) -> Result<ResponseFuture<T>, Error> {
         if self.state.token_invalid.load(Ordering::Relaxed) {
             return Err(Error {
                 kind: ErrorType::Unauthorized,
@@ -2167,21 +2168,25 @@ impl Client {
             body,
             form,
             headers: req_headers,
-            method,
-            path: bucket,
-            path_str: path,
+            route,
             use_authorization_token,
         } = request;
 
         let protocol = if self.state.use_http { "http" } else { "https" };
         let host = self.state.proxy.as_deref().unwrap_or("discord.com");
 
-        let url = format!("{}://{}/api/v{}/{}", protocol, host, API_VERSION, path);
+        let url = format!(
+            "{}://{}/api/v{}/{}",
+            protocol,
+            host,
+            API_VERSION,
+            route.display()
+        );
         #[cfg(feature = "tracing")]
         tracing::debug!("URL: {:?}", url);
 
         let mut builder = hyper::Request::builder()
-            .method(method.into_hyper())
+            .method(route.method().into_hyper())
             .uri(&url);
 
         if use_authorization_token {
@@ -2217,7 +2222,7 @@ impl Client {
                 }
             } else if let Some(bytes) = &body {
                 let len = bytes.len();
-                headers.insert(CONTENT_LENGTH, len.into());
+                headers.insert(CONTENT_LENGTH, HeaderValue::from(len));
 
                 let content_type = HeaderValue::from_static("application/json");
                 headers.insert(CONTENT_TYPE, content_type);
@@ -2240,10 +2245,12 @@ impl Client {
             }
         }
 
+        let method = route.method();
+
         let req = if let Some(form) = form {
             let form_bytes = form.build();
             if let Some(headers) = builder.headers_mut() {
-                headers.insert(CONTENT_LENGTH, form_bytes.len().into());
+                headers.insert(CONTENT_LENGTH, HeaderValue::from(form_bytes.len()));
             };
             builder
                 .body(Body::from(form_bytes))
@@ -2258,7 +2265,7 @@ impl Client {
             })?
         } else if method == Method::Put || method == Method::Post || method == Method::Patch {
             if let Some(headers) = builder.headers_mut() {
-                headers.insert(CONTENT_LENGTH, 0.into());
+                headers.insert(CONTENT_LENGTH, HeaderValue::from(0));
             }
 
             builder.body(Body::empty()).map_err(|source| Error {
@@ -2279,7 +2286,7 @@ impl Client {
         // due to move semantics in both cases.
         #[allow(clippy::option_if_let_else)]
         if let Some(ratelimiter) = self.state.ratelimiter.as_ref() {
-            let rx = ratelimiter.ticket(bucket);
+            let rx = ratelimiter.ticket(route.path());
 
             Ok(ResponseFuture::ratelimit(
                 None,

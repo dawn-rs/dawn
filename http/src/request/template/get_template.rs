@@ -4,15 +4,11 @@ use twilight_model::template::Template;
 /// Get a template by its code.
 pub struct GetTemplate<'a> {
     http: &'a Client,
-    template_code: String,
+    template_code: &'a str,
 }
 
 impl<'a> GetTemplate<'a> {
-    pub(crate) fn new(http: &'a Client, template_code: impl Into<String>) -> Self {
-        Self::_new(http, template_code.into())
-    }
-
-    const fn _new(http: &'a Client, template_code: String) -> Self {
+    pub(crate) const fn new(http: &'a Client, template_code: &'a str) -> Self {
         Self {
             http,
             template_code,

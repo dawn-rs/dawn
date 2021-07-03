@@ -44,7 +44,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
         let lavalink_auth = env::var("LAVALINK_AUTHORIZATION")?;
         let shard_count = 1u64;
 
-        let http = HttpClient::new(&token);
+        let http = HttpClient::new(token.clone());
         let user_id = http.current_user().exec().await?.model().await?.id;
 
         let lavalink = Lavalink::new(user_id, shard_count);
@@ -124,7 +124,7 @@ async fn join(msg: Message, state: State) -> Result<(), Box<dyn Error + Send + S
     state
         .http
         .create_message(msg.channel_id)
-        .content(format!("Joined <#{}>!", channel_id))?
+        .content(&format!("Joined <#{}>!", channel_id))?
         .exec()
         .await?;
 
@@ -209,7 +209,7 @@ async fn play(msg: Message, state: State) -> Result<(), Box<dyn Error + Send + S
         state
             .http
             .create_message(msg.channel_id)
-            .content(content)?
+            .content(&content)?
             .exec()
             .await?;
     } else {
@@ -241,7 +241,7 @@ async fn pause(msg: Message, state: State) -> Result<(), Box<dyn Error + Send + 
     state
         .http
         .create_message(msg.channel_id)
-        .content(format!("{} the track", action))?
+        .content(&format!("{} the track", action))?
         .exec()
         .await?;
 
@@ -277,7 +277,7 @@ async fn seek(msg: Message, state: State) -> Result<(), Box<dyn Error + Send + S
     state
         .http
         .create_message(msg.channel_id)
-        .content(format!("Seeked to {}s", position))?
+        .content(&format!("Seeked to {}s", position))?
         .exec()
         .await?;
 
@@ -345,7 +345,7 @@ async fn volume(msg: Message, state: State) -> Result<(), Box<dyn Error + Send +
     state
         .http
         .create_message(msg.channel_id)
-        .content(format!("Set the volume to {}", volume))?
+        .content(&format!("Set the volume to {}", volume))?
         .exec()
         .await?;
 

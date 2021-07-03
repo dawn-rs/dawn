@@ -18,7 +18,7 @@ use twilight_model::id::{MessageId, WebhookId};
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// # let client = Client::new("token");
+/// # let client = Client::new("token".to_owned());
 /// client
 ///     .delete_webhook_message(WebhookId(1), "token here", MessageId(2))
 ///     .reason("reason here")?
@@ -29,28 +29,28 @@ use twilight_model::id::{MessageId, WebhookId};
 pub struct DeleteWebhookMessage<'a> {
     http: &'a Client,
     message_id: MessageId,
-    reason: Option<String>,
-    token: String,
+    reason: Option<&'a str>,
+    token: &'a str,
     webhook_id: WebhookId,
 }
 
 impl<'a> DeleteWebhookMessage<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         http: &'a Client,
         webhook_id: WebhookId,
-        token: impl Into<String>,
+        token: &'a str,
         message_id: MessageId,
     ) -> Self {
         Self {
             http,
             message_id,
             reason: None,
-            token: token.into(),
+            token,
             webhook_id,
         }
     }
 
-    fn request(self) -> Result<(Request, &'a Client), Error> {
+    fn request(self) -> Result<(Request<'a>, &'a Client), Error> {
         let mut request = Request::builder(Route::DeleteWebhookMessage {
             message_id: self.message_id.0,
             token: self.token,
@@ -76,10 +76,9 @@ impl<'a> DeleteWebhookMessage<'a> {
     }
 }
 
-impl<'a> AuditLogReason for DeleteWebhookMessage<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for DeleteWebhookMessage<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }
@@ -93,17 +92,17 @@ mod tests {
 
     #[test]
     fn test_request() {
-        let client = Client::new("token");
+        let client = Client::new("token".to_owned());
         let builder = DeleteWebhookMessage::new(&client, WebhookId(1), "token", MessageId(2));
         let (actual, _) = builder.request().expect("failed to create request");
 
         let expected = Request::from_route(Route::DeleteWebhookMessage {
             message_id: 2,
-            token: "token".to_owned(),
+            token: "token",
             webhook_id: 1,
         });
 
         assert_eq!(expected.body, actual.body);
-        assert_eq!(expected.path, actual.path);
+        assert_eq!(expected.route, actual.route);
     }
 }

@@ -61,18 +61,15 @@ impl Error for UpdateCurrentUserError {}
 pub enum UpdateCurrentUserErrorType {
     /// The length of the username is either fewer than 2 UTF-16 characters or more than 32 UTF-16
     /// characters.
-    UsernameInvalid {
-        /// Provided username.
-        username: String,
-    },
+    UsernameInvalid,
 }
 
 #[derive(Default, Serialize)]
-struct UpdateCurrentUserFields {
+struct UpdateCurrentUserFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
-    avatar: Option<NullableField<String>>,
+    avatar: Option<NullableField<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    username: Option<String>,
+    username: Option<&'a str>,
 }
 
 /// Update the current user.
@@ -80,7 +77,7 @@ struct UpdateCurrentUserFields {
 /// All paramaters are optional. If the username is changed, it may cause the discriminator to be
 /// rnadomized.
 pub struct UpdateCurrentUser<'a> {
-    fields: UpdateCurrentUserFields,
+    fields: UpdateCurrentUserFields<'a>,
     http: &'a Client,
 }
 
@@ -99,10 +96,10 @@ impl<'a> UpdateCurrentUser<'a> {
     /// for more information.
     ///
     /// [the discord docs]: https://discord.com/developers/docs/reference#image-data
-    pub fn avatar(mut self, avatar: impl Into<Option<String>>) -> Self {
+    pub fn avatar(mut self, avatar: Option<&'a str>) -> Self {
         self.fields
             .avatar
-            .replace(NullableField::from_option(avatar.into()));
+            .replace(NullableField::from_option(avatar));
 
         self
     }
@@ -115,14 +112,10 @@ impl<'a> UpdateCurrentUser<'a> {
     ///
     /// Returns an [`UpdateCurrentUserErrorType::UsernameInvalid`] error type if
     /// the username length is too short or too long.
-    pub fn username(self, username: impl Into<String>) -> Result<Self, UpdateCurrentUserError> {
-        self._username(username.into())
-    }
-
-    fn _username(mut self, username: String) -> Result<Self, UpdateCurrentUserError> {
+    pub fn username(mut self, username: &'a str) -> Result<Self, UpdateCurrentUserError> {
         if !validate::username(&username) {
             return Err(UpdateCurrentUserError {
-                kind: UpdateCurrentUserErrorType::UsernameInvalid { username },
+                kind: UpdateCurrentUserErrorType::UsernameInvalid,
             });
         }
 

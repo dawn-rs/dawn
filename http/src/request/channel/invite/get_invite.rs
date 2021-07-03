@@ -20,7 +20,7 @@ struct GetInviteFields {
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 ///
 /// let invite = client
 ///     .invite("code")
@@ -33,15 +33,15 @@ struct GetInviteFields {
 /// [`with_counts`]: Self::with_counts
 /// [`with_expiration`]: Self::with_expiration
 pub struct GetInvite<'a> {
-    code: String,
+    code: &'a str,
     fields: GetInviteFields,
     http: &'a Client,
 }
 
 impl<'a> GetInvite<'a> {
-    pub(crate) fn new(http: &'a Client, code: impl Into<String>) -> Self {
+    pub(crate) fn new(http: &'a Client, code: &'a str) -> Self {
         Self {
-            code: code.into(),
+            code,
             fields: GetInviteFields::default(),
             http,
         }

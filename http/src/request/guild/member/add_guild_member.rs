@@ -49,9 +49,7 @@ impl AddGuildMemberError {
 impl Display for AddGuildMemberError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match &self.kind {
-            AddGuildMemberErrorType::NicknameInvalid { .. } => {
-                f.write_str("nickname length is invalid")
-            }
+            AddGuildMemberErrorType::NicknameInvalid => f.write_str("nickname length is invalid"),
         }
     }
 }
@@ -63,24 +61,24 @@ impl Error for AddGuildMemberError {}
 pub enum AddGuildMemberErrorType {
     /// Nickname is either empty or the length is more than 32 UTF-16
     /// characters.
-    NicknameInvalid { nickname: String },
+    NicknameInvalid,
 }
 
 #[derive(Serialize)]
-struct AddGuildMemberFields {
-    pub access_token: String,
+struct AddGuildMemberFields<'a> {
+    pub access_token: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deaf: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mute: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub nick: Option<String>,
+    pub nick: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub roles: Option<Vec<RoleId>>,
+    pub roles: Option<&'a [RoleId]>,
 }
 
 pub struct AddGuildMember<'a> {
-    fields: AddGuildMemberFields,
+    fields: AddGuildMemberFields<'a>,
     guild_id: GuildId,
     http: &'a Client,
     user_id: UserId,
@@ -93,20 +91,11 @@ pub struct AddGuildMember<'a> {
 ///
 /// [the discord docs]: https://discord.com/developers/docs/resources/guild#add-guild-member
 impl<'a> AddGuildMember<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         http: &'a Client,
         guild_id: GuildId,
         user_id: UserId,
-        access_token: impl Into<String>,
-    ) -> Self {
-        Self::_new(http, guild_id, user_id, access_token.into())
-    }
-
-    const fn _new(
-        http: &'a Client,
-        guild_id: GuildId,
-        user_id: UserId,
-        access_token: String,
+        access_token: &'a str,
     ) -> Self {
         Self {
             fields: AddGuildMemberFields {
@@ -146,14 +135,10 @@ impl<'a> AddGuildMember<'a> {
     ///
     /// Returns an [`AddGuildMemberErrorType::NicknameInvalid`] error type if
     /// the nickname is too short or too long.
-    pub fn nick(self, nick: impl Into<String>) -> Result<Self, AddGuildMemberError> {
-        self._nick(nick.into())
-    }
-
-    fn _nick(mut self, nick: String) -> Result<Self, AddGuildMemberError> {
+    pub fn nick(mut self, nick: &'a str) -> Result<Self, AddGuildMemberError> {
         if !validate::nickname(&nick) {
             return Err(AddGuildMemberError {
-                kind: AddGuildMemberErrorType::NicknameInvalid { nickname: nick },
+                kind: AddGuildMemberErrorType::NicknameInvalid,
             });
         }
 
@@ -163,7 +148,7 @@ impl<'a> AddGuildMember<'a> {
     }
 
     /// List of roles to assign the new member.
-    pub fn roles(mut self, roles: Vec<RoleId>) -> Self {
+    pub fn roles(mut self, roles: &'a [RoleId]) -> Self {
         self.fields.roles.replace(roles);
 
         self

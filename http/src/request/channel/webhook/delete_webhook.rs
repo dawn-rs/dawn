@@ -6,16 +6,16 @@ use crate::{
 };
 use twilight_model::id::WebhookId;
 
-struct DeleteWebhookParams {
-    token: Option<String>,
+struct DeleteWebhookParams<'a> {
+    token: Option<&'a str>,
 }
 
 /// Delete a webhook by its ID.
 pub struct DeleteWebhook<'a> {
-    fields: DeleteWebhookParams,
+    fields: DeleteWebhookParams<'a>,
     http: &'a Client,
     id: WebhookId,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 impl<'a> DeleteWebhook<'a> {
@@ -29,8 +29,8 @@ impl<'a> DeleteWebhook<'a> {
     }
 
     /// Specify the token for auth, if not already authenticated with a Bot token.
-    pub fn token(mut self, token: impl Into<String>) -> Self {
-        self.fields.token.replace(token.into());
+    pub fn token(mut self, token: &'a str) -> Self {
+        self.fields.token.replace(token);
 
         self
     }
@@ -57,10 +57,9 @@ impl<'a> DeleteWebhook<'a> {
     }
 }
 
-impl<'a> AuditLogReason for DeleteWebhook<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for DeleteWebhook<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }

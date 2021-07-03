@@ -135,15 +135,6 @@ pub struct RoleFields {
     pub position: Option<i64>,
 }
 
-impl From<RoleFieldsBuilder> for RoleFields {
-    /// Convert a [`RoleFieldsBuilder`] into a [`RoleFields`].
-    ///
-    /// This is equivalent to calling [`RoleFieldsBuilder::build`].
-    fn from(builder: RoleFieldsBuilder) -> Self {
-        builder.build()
-    }
-}
-
 /// Variants of channel fields sent to Discord.
 ///
 /// Use [`GuildChannelFieldsBuilder`] to build one.
@@ -157,8 +148,7 @@ pub enum GuildChannelFields {
 }
 
 impl GuildChannelFields {
-    #[allow(clippy::missing_const_for_fn)]
-    pub fn id(self) -> ChannelId {
+    pub const fn id(&self) -> ChannelId {
         match self {
             Self::Category(c) => c.id,
             Self::Text(t) => t.id,
@@ -201,12 +191,6 @@ pub struct TextFields {
     pub topic: Option<String>,
 }
 
-impl From<TextFieldsBuilder> for TextFields {
-    fn from(builder: TextFieldsBuilder) -> TextFields {
-        builder.build()
-    }
-}
-
 /// Voice channel fields sent to Discord.
 ///
 /// Use [`VoiceFieldsBuilder`] to build one.
@@ -226,12 +210,6 @@ pub struct VoiceFields {
     pub user_limit: Option<u64>,
 }
 
-impl From<VoiceFieldsBuilder> for VoiceFields {
-    fn from(builder: VoiceFieldsBuilder) -> VoiceFields {
-        builder.build()
-    }
-}
-
 /// Create a new request to create a guild.
 ///
 /// The minimum length of the name is 2 UTF-16 characters and the maximum is 100 UTF-16 characters.
@@ -242,11 +220,7 @@ pub struct CreateGuild<'a> {
 }
 
 impl<'a> CreateGuild<'a> {
-    pub(crate) fn new(http: &'a Client, name: impl Into<String>) -> Result<Self, CreateGuildError> {
-        Self::_new(http, name.into())
-    }
-
-    fn _new(http: &'a Client, name: String) -> Result<Self, CreateGuildError> {
+    pub(crate) fn new(http: &'a Client, name: String) -> Result<Self, CreateGuildError> {
         if !validate::guild_name(&name) {
             return Err(CreateGuildError {
                 kind: CreateGuildErrorType::NameInvalid { name },
@@ -272,14 +246,14 @@ impl<'a> CreateGuild<'a> {
     }
 
     /// Add a role to the list of roles.
-    pub fn add_role(mut self, role: impl Into<RoleFields>) -> Self {
+    pub fn add_role(mut self, role: RoleFields) -> Self {
         if self.fields.roles.is_none() {
-            let builder = RoleFieldsBuilder::new("@everyone");
+            let builder = RoleFieldsBuilder::new("@everyone".to_owned());
             self.fields.roles.replace(vec![builder.build()]);
         }
 
         if let Some(roles) = self.fields.roles.as_mut() {
-            roles.push(role.into());
+            roles.push(role);
         }
 
         self
@@ -318,14 +292,15 @@ impl<'a> CreateGuild<'a> {
     ///     },
     /// };
     /// # #[tokio::main] async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("my token");
+    /// # let client = Client::new("my token".to_owned());
     ///
-    /// let text = TextFieldsBuilder::new("text channel")?;
-    /// let voice = VoiceFieldsBuilder::new("voice channel")?;
-    /// let text2 = TextFieldsBuilder::new("other text channel")?
-    ///     .topic("posting")?;
+    /// let text = TextFieldsBuilder::new("text channel".to_owned())?.build();
+    /// let voice = VoiceFieldsBuilder::new("voice channel".to_owned())?.build();
+    /// let text2 = TextFieldsBuilder::new("other text channel".to_owned())?
+    ///     .topic("posting".to_owned())?
+    ///     .build();
     ///
-    /// let category = CategoryFieldsBuilder::new("category channel")?
+    /// let category = CategoryFieldsBuilder::new("category channel".to_owned())?
     ///     .add_text(text2)
     ///     .add_voice(voice);
     ///
@@ -334,7 +309,7 @@ impl<'a> CreateGuild<'a> {
     ///     .add_category_builder(category)
     ///     .build();
     ///
-    /// let guild = client.create_guild("guild name")?
+    /// let guild = client.create_guild("guild name".to_owned())?
     ///     .channels(channels)?
     ///     .exec()
     ///     .await?;
@@ -393,8 +368,8 @@ impl<'a> CreateGuild<'a> {
     /// for more information.
     ///
     /// [the discord docs]: https://discord.com/developers/docs/reference#image-data
-    pub fn icon(mut self, icon: impl Into<String>) -> Self {
-        self.fields.icon.replace(icon.into());
+    pub fn icon(mut self, icon: String) -> Self {
+        self.fields.icon.replace(icon);
 
         self
     }
@@ -406,12 +381,12 @@ impl<'a> CreateGuild<'a> {
     /// If there are roles, this replaces the first role in the position.
     ///
     /// [`roles`]: Self::roles
-    pub fn override_everyone(mut self, everyone: impl Into<RoleFields>) -> Self {
+    pub fn override_everyone(mut self, everyone: RoleFields) -> Self {
         if let Some(roles) = self.fields.roles.as_mut() {
             roles.remove(0);
-            roles.insert(0, everyone.into());
+            roles.insert(0, everyone);
         } else {
-            self.fields.roles.replace(vec![everyone.into()]);
+            self.fields.roles.replace(vec![everyone]);
         }
 
         self
@@ -446,10 +421,10 @@ impl<'a> CreateGuild<'a> {
     /// ```rust,no_run
     /// use twilight_http::{Client, request::guild::create_guild::RoleFieldsBuilder};
     /// # #[tokio::main] async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("my token");
+    /// # let client = Client::new("my token".to_owned());
     ///
-    /// let roles = vec![RoleFieldsBuilder::new("role 1").color(0x543923)?.build()];
-    /// client.create_guild("guild name")?.roles(roles)?.exec().await?;
+    /// let roles = vec![RoleFieldsBuilder::new("role 1".to_owned()).color(0x543923)?.build()];
+    /// client.create_guild("guild name".to_owned())?.roles(roles)?.exec().await?;
     /// # Ok(()) }
     /// ```
     ///
@@ -467,7 +442,7 @@ impl<'a> CreateGuild<'a> {
         if let Some(prev_roles) = self.fields.roles.as_mut() {
             roles.insert(0, prev_roles.remove(0));
         } else {
-            let builder = RoleFieldsBuilder::new("@everyone");
+            let builder = RoleFieldsBuilder::new("@everyone".to_owned());
             roles.insert(0, builder.build());
         }
 

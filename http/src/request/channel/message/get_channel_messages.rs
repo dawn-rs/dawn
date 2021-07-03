@@ -49,7 +49,7 @@ impl GetChannelMessagesError {
 impl Display for GetChannelMessagesError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match &self.kind {
-            GetChannelMessagesErrorType::LimitInvalid { .. } => f.write_str("the limit is invalid"),
+            GetChannelMessagesErrorType::LimitInvalid => f.write_str("the limit is invalid"),
         }
     }
 }
@@ -61,10 +61,7 @@ impl Error for GetChannelMessagesError {}
 #[non_exhaustive]
 pub enum GetChannelMessagesErrorType {
     /// The maximum number of messages to retrieve is either 0 or more than 100.
-    LimitInvalid {
-        /// Provided maximum number of messages to retrieve.
-        limit: u64,
-    },
+    LimitInvalid,
 }
 
 #[derive(Default)]
@@ -87,7 +84,7 @@ struct GetChannelMessagesFields {
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 /// let channel_id = ChannelId(123);
 /// let message_id = MessageId(234);
 ///
@@ -165,7 +162,7 @@ impl<'a> GetChannelMessages<'a> {
     pub fn limit(mut self, limit: u64) -> Result<Self, GetChannelMessagesError> {
         if !validate::get_channel_messages_limit(limit) {
             return Err(GetChannelMessagesError {
-                kind: GetChannelMessagesErrorType::LimitInvalid { limit },
+                kind: GetChannelMessagesErrorType::LimitInvalid,
             });
         }
 

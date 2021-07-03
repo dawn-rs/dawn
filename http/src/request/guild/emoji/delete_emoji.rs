@@ -11,7 +11,7 @@ pub struct DeleteEmoji<'a> {
     emoji_id: EmojiId,
     guild_id: GuildId,
     http: &'a Client,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 impl<'a> DeleteEmoji<'a> {
@@ -46,10 +46,9 @@ impl<'a> DeleteEmoji<'a> {
     }
 }
 
-impl<'a> AuditLogReason for DeleteEmoji<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for DeleteEmoji<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }

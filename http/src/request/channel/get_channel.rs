@@ -13,7 +13,7 @@ use twilight_model::{channel::Channel, id::ChannelId};
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 ///
 /// let channel_id = ChannelId(100);
 ///

@@ -11,11 +11,11 @@ use twilight_model::{
 };
 
 #[derive(Debug, Default, serde::Serialize)]
-struct UpdateGuildCommandFields {
+struct UpdateGuildCommandFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
-    description: Option<String>,
+    description: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<String>,
+    name: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     options: Option<Vec<CommandOption>>,
 }
@@ -27,7 +27,7 @@ struct UpdateGuildCommandFields {
 ///
 /// [the discord docs]: https://discord.com/developers/docs/interactions/slash-commands#edit-guild-application-command
 pub struct UpdateGuildCommand<'a> {
-    fields: UpdateGuildCommandFields,
+    fields: UpdateGuildCommandFields<'a>,
     application_id: ApplicationId,
     command_id: CommandId,
     guild_id: GuildId,
@@ -51,15 +51,15 @@ impl<'a> UpdateGuildCommand<'a> {
     }
 
     /// Edit the name of the command.
-    pub fn name(mut self, name: impl Into<String>) -> Self {
-        self.fields.name = Some(name.into());
+    pub const fn name(mut self, name: &'a str) -> Self {
+        self.fields.name = Some(name);
 
         self
     }
 
     /// Edit the description of the command.
-    pub fn description(mut self, description: impl Into<String>) -> Self {
-        self.fields.description = Some(description.into());
+    pub const fn description(mut self, description: &'a str) -> Self {
+        self.fields.description = Some(description);
 
         self
     }
@@ -75,7 +75,7 @@ impl<'a> UpdateGuildCommand<'a> {
         self
     }
 
-    fn request(&self) -> Result<Request, Error> {
+    fn request(&self) -> Result<Request<'a>, Error> {
         Ok(Request::builder(Route::UpdateGuildCommand {
             application_id: self.application_id.0,
             command_id: self.command_id.0,

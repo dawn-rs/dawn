@@ -19,7 +19,7 @@ use twilight_model::{
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 ///
 /// let channel_id = ChannelId(123);
 /// let allow = Permissions::VIEW_CHANNEL;
@@ -55,18 +55,18 @@ impl<'a> UpdateChannelPermission<'a> {
     }
 
     /// Specify this override to be for a member.
-    pub fn member(self, user_id: impl Into<UserId>) -> UpdateChannelPermissionConfigured<'a> {
-        self.configure(&PermissionOverwriteType::Member(user_id.into()))
+    pub const fn member(self, user_id: UserId) -> UpdateChannelPermissionConfigured<'a> {
+        self.configure(PermissionOverwriteType::Member(user_id))
     }
 
     /// Specify this override to be for a role.
-    pub fn role(self, role_id: impl Into<RoleId>) -> UpdateChannelPermissionConfigured<'a> {
-        self.configure(&PermissionOverwriteType::Role(role_id.into()))
+    pub const fn role(self, role_id: RoleId) -> UpdateChannelPermissionConfigured<'a> {
+        self.configure(PermissionOverwriteType::Role(role_id))
     }
 
     const fn configure(
         self,
-        target: &PermissionOverwriteType,
+        target: PermissionOverwriteType,
     ) -> UpdateChannelPermissionConfigured<'a> {
         UpdateChannelPermissionConfigured::new(
             self.http,

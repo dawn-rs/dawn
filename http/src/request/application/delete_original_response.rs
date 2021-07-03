@@ -30,19 +30,19 @@ use twilight_model::id::ApplicationId;
 pub struct DeleteOriginalResponse<'a> {
     application_id: ApplicationId,
     http: &'a Client,
-    token: String,
+    token: &'a str,
 }
 
 impl<'a> DeleteOriginalResponse<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         http: &'a Client,
         application_id: ApplicationId,
-        token: impl Into<String>,
+        token: &'a str,
     ) -> Self {
         Self {
             application_id,
             http,
-            token: token.into(),
+            token,
         }
     }
 
@@ -52,7 +52,7 @@ impl<'a> DeleteOriginalResponse<'a> {
     pub fn exec(self) -> ResponseFuture<EmptyBody> {
         let request = Request::from_route(Route::DeleteInteractionOriginal {
             application_id: self.application_id.0,
-            interaction_token: self.token.clone(),
+            interaction_token: self.token,
         });
 
         self.http.request(request)

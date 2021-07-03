@@ -1,18 +1,15 @@
 use crate::{client::Client, request::Request, response::ResponseFuture, routing::Route};
-use twilight_model::user::User;
+use twilight_model::{id::UserId, user::User};
 
 /// Get a user's information by id.
 pub struct GetUser<'a> {
     http: &'a Client,
-    target_user: String,
+    user_id: UserId,
 }
 
 impl<'a> GetUser<'a> {
-    pub(crate) fn new(http: &'a Client, target_user: impl Into<String>) -> Self {
-        Self {
-            http,
-            target_user: target_user.into(),
-        }
+    pub(crate) const fn new(http: &'a Client, user_id: UserId) -> Self {
+        Self { http, user_id }
     }
 
     /// Execute the request, returning a future resolving to a [`Response`].
@@ -20,7 +17,7 @@ impl<'a> GetUser<'a> {
     /// [`Response`]: crate::response::Response
     pub fn exec(self) -> ResponseFuture<User> {
         let request = Request::from_route(Route::GetUser {
-            target_user: self.target_user,
+            user_id: self.user_id.0,
         });
 
         self.http.request(request)

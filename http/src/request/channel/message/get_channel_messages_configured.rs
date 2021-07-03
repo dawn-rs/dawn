@@ -62,10 +62,7 @@ impl Error for GetChannelMessagesConfiguredError {}
 #[non_exhaustive]
 pub enum GetChannelMessagesConfiguredErrorType {
     /// The maximum number of messages to retrieve is either 0 or more than 100.
-    LimitInvalid {
-        /// Provided maximum number of messages to retrieve.
-        limit: u64,
-    },
+    LimitInvalid,
 }
 
 struct GetChannelMessagesConfiguredFields {
@@ -118,7 +115,7 @@ impl<'a> GetChannelMessagesConfigured<'a> {
     pub fn limit(mut self, limit: u64) -> Result<Self, GetChannelMessagesConfiguredError> {
         if !validate::get_channel_messages_limit(limit) {
             return Err(GetChannelMessagesConfiguredError {
-                kind: GetChannelMessagesConfiguredErrorType::LimitInvalid { limit },
+                kind: GetChannelMessagesConfiguredErrorType::LimitInvalid,
             });
         }
 

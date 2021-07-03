@@ -60,16 +60,13 @@ impl Error for CreateGuildFromTemplateError {}
 pub enum CreateGuildFromTemplateErrorType {
     /// Name of the guild is either fewer than 2 UTF-16 characters or more than 100 UTF-16
     /// characters.
-    NameInvalid {
-        /// Provided name.
-        name: String,
-    },
+    NameInvalid,
 }
 
 #[derive(Serialize)]
-struct CreateGuildFromTemplateFields {
-    name: String,
-    icon: Option<String>,
+struct CreateGuildFromTemplateFields<'a> {
+    name: &'a str,
+    icon: Option<&'a str>,
 }
 
 /// Create a new guild based on a template.
@@ -81,28 +78,20 @@ struct CreateGuildFromTemplateFields {
 /// Returns a [`CreateGuildFromTemplateErrorType::NameInvalid`] error type if
 /// the name is invalid.
 pub struct CreateGuildFromTemplate<'a> {
-    fields: CreateGuildFromTemplateFields,
+    fields: CreateGuildFromTemplateFields<'a>,
     http: &'a Client,
-    template_code: String,
+    template_code: &'a str,
 }
 
 impl<'a> CreateGuildFromTemplate<'a> {
     pub(crate) fn new(
         http: &'a Client,
-        template_code: impl Into<String>,
-        name: impl Into<String>,
-    ) -> Result<Self, CreateGuildFromTemplateError> {
-        Self::_new(http, template_code.into(), name.into())
-    }
-
-    fn _new(
-        http: &'a Client,
-        template_code: String,
-        name: String,
+        template_code: &'a str,
+        name: &'a str,
     ) -> Result<Self, CreateGuildFromTemplateError> {
         if !validate::guild_name(&name) {
             return Err(CreateGuildFromTemplateError {
-                kind: CreateGuildFromTemplateErrorType::NameInvalid { name },
+                kind: CreateGuildFromTemplateErrorType::NameInvalid,
             });
         }
 
@@ -120,11 +109,7 @@ impl<'a> CreateGuildFromTemplate<'a> {
     /// for more information.
     ///
     /// [the discord docs]: https://discord.com/developers/docs/reference#image-data
-    pub fn icon(self, icon: impl Into<String>) -> Self {
-        self._icon(icon.into())
-    }
-
-    fn _icon(mut self, icon: String) -> Self {
+    pub fn icon(mut self, icon: &'a str) -> Self {
         self.fields.icon.replace(icon);
 
         self

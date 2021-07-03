@@ -12,16 +12,16 @@ use twilight_model::{application::command::Command, id::ApplicationId};
 /// This method is idempotent: it can be used on every start, without being
 /// ratelimited if there aren't changes to the commands.
 pub struct SetGlobalCommands<'a> {
-    commands: Vec<Command>,
+    commands: &'a [Command],
     application_id: ApplicationId,
     http: &'a Client,
 }
 
 impl<'a> SetGlobalCommands<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         http: &'a Client,
         application_id: ApplicationId,
-        commands: Vec<Command>,
+        commands: &'a [Command],
     ) -> Self {
         Self {
             commands,
@@ -30,7 +30,7 @@ impl<'a> SetGlobalCommands<'a> {
         }
     }
 
-    fn request(&self) -> Result<Request, Error> {
+    fn request(&self) -> Result<Request<'a>, Error> {
         Ok(Request::builder(Route::SetGlobalCommands {
             application_id: self.application_id.0,
         })

@@ -3,13 +3,13 @@ use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct RouteDisplay<'a>(&'a Route);
+pub struct RouteDisplay<'a>(&'a Route<'a>);
 
 impl<'a> RouteDisplay<'a> {
     /// Create a display formatter for a route.
     ///
     /// This is equivalent to [`Route::display`].
-    pub(super) const fn new(route: &'a Route) -> Self {
+    pub(super) const fn new(route: &'a Route<'a>) -> Self {
         Self(route)
     }
 
@@ -26,7 +26,7 @@ impl<'a> RouteDisplay<'a> {
     ///
     /// assert_eq!(display.route_ref(), &route);
     /// ```
-    pub const fn route_ref(&self) -> &'a Route {
+    pub const fn route_ref(&self) -> &'a Route<'a> {
         self.0
     }
 }
@@ -209,13 +209,18 @@ impl Display for RouteDisplay<'_> {
                 channel_id,
                 emoji,
                 message_id,
+            }
+            | Route::DeleteReactionCurrentUser {
+                channel_id,
+                emoji,
+                message_id,
             } => {
                 f.write_str("channels/")?;
                 Display::fmt(channel_id, f)?;
                 f.write_str("/messages/")?;
                 Display::fmt(message_id, f)?;
                 f.write_str("/reactions/")?;
-                f.write_str(emoji)?;
+                Display::fmt(&emoji.display(), f)?;
 
                 f.write_str("/@me")
             }
@@ -373,7 +378,7 @@ impl Display for RouteDisplay<'_> {
                 Display::fmt(message_id, f)?;
                 f.write_str("/reactions/")?;
 
-                f.write_str(emoji)
+                Display::fmt(&emoji.display(), f)
             }
             Route::DeleteMessage {
                 channel_id,
@@ -417,17 +422,17 @@ impl Display for RouteDisplay<'_> {
                 channel_id,
                 emoji,
                 message_id,
-                user,
+                user_id,
             } => {
                 f.write_str("channels/")?;
                 Display::fmt(channel_id, f)?;
                 f.write_str("/messages/")?;
                 Display::fmt(message_id, f)?;
                 f.write_str("/reactions/")?;
-                f.write_str(emoji)?;
+                Display::fmt(&emoji.display(), f)?;
                 f.write_str("/")?;
 
-                f.write_str(user)
+                Display::fmt(user_id, f)
             }
             Route::DeleteRole { guild_id, role_id } | Route::UpdateRole { guild_id, role_id } => {
                 f.write_str("guilds/")?;
@@ -580,7 +585,7 @@ impl Display for RouteDisplay<'_> {
                 f.write_str("/permissions")
             }
             Route::GetCurrentUserApplicationInfo => f.write_str("/oauth2/applications/@me"),
-            Route::UpdateCurrentUser => f.write_str("users/@me"),
+            Route::GetCurrentUser | Route::UpdateCurrentUser => f.write_str("users/@me"),
             Route::GetGateway => f.write_str("gateway"),
             Route::GetGuild {
                 guild_id,
@@ -814,7 +819,7 @@ impl Display for RouteDisplay<'_> {
                 f.write_str("/messages/")?;
                 Display::fmt(message_id, f)?;
                 f.write_str("/reactions/")?;
-                f.write_str(emoji)?;
+                Display::fmt(&emoji.display(), f)?;
                 f.write_str("?")?;
 
                 if let Some(after) = after {
@@ -830,10 +835,10 @@ impl Display for RouteDisplay<'_> {
                 Ok(())
             }
             Route::GetUserConnections => f.write_str("users/@me/connections"),
-            Route::GetUser { target_user } => {
+            Route::GetUser { user_id } => {
                 f.write_str("users/")?;
 
-                f.write_str(target_user)
+                Display::fmt(user_id, f)
             }
             Route::GetVoiceRegions => f.write_str("voice/regions"),
             Route::InteractionCallback {

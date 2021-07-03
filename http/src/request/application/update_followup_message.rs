@@ -3,7 +3,7 @@
 use crate::{
     client::Client,
     error::Error as HttpError,
-    request::{validate, Form, NullableField, Request},
+    request::{self, validate, Form, NullableField, Request},
     response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
@@ -52,16 +52,14 @@ impl UpdateFollowupMessageError {
 impl Display for UpdateFollowupMessageError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match &self.kind {
-            UpdateFollowupMessageErrorType::ContentInvalid { .. } => {
+            UpdateFollowupMessageErrorType::ContentInvalid => {
                 f.write_str("message content is invalid")
             }
             UpdateFollowupMessageErrorType::EmbedTooLarge { .. } => {
                 f.write_str("length of one of the embeds is too large")
             }
-            UpdateFollowupMessageErrorType::TooManyEmbeds { embeds } => {
-                Display::fmt(&embeds.len(), f)?;
-
-                f.write_str(" embeds were provided, but only 10 may be provided")
+            UpdateFollowupMessageErrorType::TooManyEmbeds => {
+                f.write_str("only 10 embeds may be provided")
             }
         }
     }
@@ -80,17 +78,13 @@ impl Error for UpdateFollowupMessageError {
 #[non_exhaustive]
 pub enum UpdateFollowupMessageErrorType {
     /// Content is over 2000 UTF-16 characters.
-    ContentInvalid {
-        /// Provided content.
-        content: String,
-    },
+    ContentInvalid,
     /// Length of one of the embeds is over 6000 characters.
     EmbedTooLarge {
-        /// Provided embeds.
-        embeds: Vec<Embed>,
         /// Index of the embed that was too large.
         ///
-        /// This can be used to index into [`embeds`] to retrieve the bad embed.
+        /// This can be used to index into the provided embeds to retrieve the
+        /// invalid embed.
         ///
         /// [`embeds`]: Self::EmbedTooLarge.embeds
         index: usize,
@@ -98,24 +92,21 @@ pub enum UpdateFollowupMessageErrorType {
     /// Too many embeds were provided.
     ///
     /// A followup message can have up to 10 embeds.
-    TooManyEmbeds {
-        /// Provided embeds.
-        embeds: Vec<Embed>,
-    },
+    TooManyEmbeds,
 }
 
 #[derive(Default, Serialize)]
-struct UpdateFollowupMessageFields {
+struct UpdateFollowupMessageFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     allowed_mentions: Option<AllowedMentions>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    attachments: Vec<Attachment>,
+    #[serde(skip_serializing_if = "request::slice_is_empty")]
+    attachments: &'a [Attachment],
     #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<NullableField<String>>,
+    content: Option<NullableField<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    embeds: Option<NullableField<Vec<Embed>>>,
+    embeds: Option<NullableField<&'a [Embed]>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    payload_json: Option<Vec<u8>>,
+    payload_json: Option<&'a [u8]>,
 }
 
 /// Update a followup message.
@@ -147,7 +138,7 @@ struct UpdateFollowupMessageFields {
 ///     // By creating a default set of allowed mentions, no entity can be
 ///     // mentioned.
 ///     .allowed_mentions(AllowedMentions::default())
-///     .content(Some("test <@3>".to_owned()))?
+///     .content(Some("test <@3>"))?
 ///     .exec()
 ///     .await?;
 /// # Ok(()) }
@@ -155,11 +146,11 @@ struct UpdateFollowupMessageFields {
 ///
 /// [`DeleteFollowupMessage`]: super::DeleteFollowupMessage
 pub struct UpdateFollowupMessage<'a> {
-    fields: UpdateFollowupMessageFields,
-    files: Vec<(String, Vec<u8>)>,
+    fields: UpdateFollowupMessageFields<'a>,
+    files: &'a [(&'a str, &'a [u8])],
     http: &'a Client,
     message_id: MessageId,
-    token: String,
+    token: &'a str,
     application_id: ApplicationId,
 }
 
@@ -170,7 +161,7 @@ impl<'a> UpdateFollowupMessage<'a> {
     pub(crate) fn new(
         http: &'a Client,
         application_id: ApplicationId,
-        token: impl Into<String>,
+        token: &'a str,
         message_id: MessageId,
     ) -> Self {
         Self {
@@ -178,10 +169,10 @@ impl<'a> UpdateFollowupMessage<'a> {
                 allowed_mentions: http.default_allowed_mentions(),
                 ..UpdateFollowupMessageFields::default()
             },
-            files: Vec::new(),
+            files: &[],
             http,
             message_id,
-            token: token.into(),
+            token,
             application_id,
         }
     }
@@ -193,24 +184,12 @@ impl<'a> UpdateFollowupMessage<'a> {
         self
     }
 
-    /// Specify an attachment already present in the target message to keep.
-    ///
-    /// If called, all unspecified attachments will be removed from the message.
-    /// If not called, all attachments will be kept.
-    pub fn attachment(mut self, attachment: Attachment) -> Self {
-        self.fields.attachments.push(attachment);
-
-        self
-    }
-
     /// Specify multiple attachments already present in the target message to keep.
     ///
     /// If called, all unspecified attachments will be removed from the message.
     /// If not called, all attachments will be kept.
-    pub fn attachments(mut self, attachments: impl IntoIterator<Item = Attachment>) -> Self {
-        self.fields
-            .attachments
-            .extend(attachments.into_iter().collect::<Vec<Attachment>>());
+    pub const fn attachments(mut self, attachments: &'a [Attachment]) -> Self {
+        self.fields.attachments = attachments;
 
         self
     }
@@ -228,13 +207,11 @@ impl<'a> UpdateFollowupMessage<'a> {
     ///
     /// Returns an [`UpdateFollowupMessageErrorType::ContentInvalid`] error type if
     /// the content length is too long.
-    pub fn content(mut self, content: Option<String>) -> Result<Self, UpdateFollowupMessageError> {
+    pub fn content(mut self, content: Option<&'a str>) -> Result<Self, UpdateFollowupMessageError> {
         if let Some(content_ref) = content.as_ref() {
             if !validate::content_limit(content_ref) {
                 return Err(UpdateFollowupMessageError {
-                    kind: UpdateFollowupMessageErrorType::ContentInvalid {
-                        content: content.expect("content is known to be some"),
-                    },
+                    kind: UpdateFollowupMessageErrorType::ContentInvalid,
                     source: None,
                 });
             }
@@ -281,7 +258,7 @@ impl<'a> UpdateFollowupMessage<'a> {
     ///     .build()?;
     ///
     /// client.update_followup_message("token", MessageId(2))?
-    ///     .embeds(Some(vec![embed]))?
+    ///     .embeds(Some(&[embed]))?
     ///     .exec()
     ///     .await?;
     /// # Ok(()) }
@@ -299,25 +276,20 @@ impl<'a> UpdateFollowupMessage<'a> {
     /// [`EMBED_COUNT_LIMIT`]: Self::EMBED_COUNT_LIMIT
     pub fn embeds(
         mut self,
-        embeds: Option<Vec<Embed>>,
+        embeds: Option<&'a [Embed]>,
     ) -> Result<Self, UpdateFollowupMessageError> {
         if let Some(embeds_present) = embeds.as_deref() {
             if embeds_present.len() > Self::EMBED_COUNT_LIMIT {
                 return Err(UpdateFollowupMessageError {
-                    kind: UpdateFollowupMessageErrorType::TooManyEmbeds {
-                        embeds: embeds.expect("embeds are known to be present"),
-                    },
+                    kind: UpdateFollowupMessageErrorType::TooManyEmbeds,
                     source: None,
                 });
             }
 
             for (idx, embed) in embeds_present.iter().enumerate() {
-                if let Err(source) = validate::embed(&embed) {
+                if let Err(source) = validate::embed(embed) {
                     return Err(UpdateFollowupMessageError {
-                        kind: UpdateFollowupMessageErrorType::EmbedTooLarge {
-                            embeds: embeds.expect("embeds are known to be present"),
-                            index: idx,
-                        },
+                        kind: UpdateFollowupMessageErrorType::EmbedTooLarge { index: idx },
                         source: Some(Box::new(source)),
                     });
                 }
@@ -331,23 +303,9 @@ impl<'a> UpdateFollowupMessage<'a> {
         Ok(self)
     }
 
-    /// Attach a file to the followup message.
-    ///
-    /// This method is repeatable.
-    pub fn file(mut self, name: impl Into<String>, file: impl Into<Vec<u8>>) -> Self {
-        self.files.push((name.into(), file.into()));
-
-        self
-    }
-
     /// Attach multiple files to the followup message.
-    pub fn files<N: Into<String>, F: Into<Vec<u8>>>(
-        mut self,
-        attachments: impl IntoIterator<Item = (N, F)>,
-    ) -> Self {
-        for (name, file) in attachments {
-            self = self.file(name, file);
-        }
+    pub const fn files(mut self, files: &'a [(&'a str, &'a [u8])]) -> Self {
+        self.files = files;
 
         self
     }
@@ -355,34 +313,34 @@ impl<'a> UpdateFollowupMessage<'a> {
     /// JSON encoded body of any additional request fields.
     ///
     /// If this method is called, all other fields are ignored, except for
-    /// [`file`]. See [Discord Docs/Create Message] and
+    /// [`files`]. See [Discord Docs/Create Message] and
     /// [`CreateFollowupMessage::payload_json`].
     ///
-    /// [`file`]: Self::file
+    /// [`files`]: Self::files
     /// [`CreateFollowupMessage::payload_json`]: super::CreateFollowupMessage::payload_json
     /// [Discord Docs/Create Message]: https://discord.com/developers/docs/resources/channel#create-message-params
-    pub fn payload_json(mut self, payload_json: impl Into<Vec<u8>>) -> Self {
-        self.fields.payload_json.replace(payload_json.into());
+    pub fn payload_json(mut self, payload_json: &'a [u8]) -> Self {
+        self.fields.payload_json.replace(payload_json);
 
         self
     }
 
-    fn request(&mut self) -> Result<Request, HttpError> {
+    fn request(&mut self) -> Result<Request<'a>, HttpError> {
         let mut request = Request::builder(Route::UpdateWebhookMessage {
             message_id: self.message_id.0,
-            token: self.token.clone(),
+            token: self.token,
             webhook_id: self.application_id.0,
         });
 
         if !self.files.is_empty() || self.fields.payload_json.is_some() {
             let mut form = Form::new();
 
-            for (index, (name, file)) in self.files.drain(..).enumerate() {
-                form.file(format!("{}", index).as_bytes(), name.as_bytes(), &file);
+            for (index, (name, file)) in self.files.iter().enumerate() {
+                form.file(index.to_be_bytes().as_ref(), name.as_bytes(), file);
             }
 
             if let Some(payload_json) = &self.fields.payload_json {
-                form.payload_json(&payload_json);
+                form.payload_json(payload_json);
             } else {
                 let body = crate::json::to_vec(&self.fields).map_err(HttpError::json)?;
                 form.payload_json(&body);

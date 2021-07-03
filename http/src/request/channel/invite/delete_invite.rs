@@ -13,15 +13,15 @@ use crate::{
 /// [`MANAGE_CHANNELS`]: twilight_model::guild::Permissions::MANAGE_CHANNELS
 /// [`MANAGE_GUILD`]: twilight_model::guild::Permissions::MANAGE_GUILD
 pub struct DeleteInvite<'a> {
-    code: String,
+    code: &'a str,
     http: &'a Client,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 impl<'a> DeleteInvite<'a> {
-    pub(crate) fn new(http: &'a Client, code: impl Into<String>) -> Self {
+    pub(crate) const fn new(http: &'a Client, code: &'a str) -> Self {
         Self {
-            code: code.into(),
+            code,
             http,
             reason: None,
         }
@@ -33,7 +33,7 @@ impl<'a> DeleteInvite<'a> {
     pub fn exec(self) -> ResponseFuture<EmptyBody> {
         let mut request = Request::builder(Route::DeleteInvite { code: self.code });
 
-        if let Some(reason) = &self.reason {
+        if let Some(reason) = self.reason {
             let header = match request::audit_header(reason) {
                 Ok(header) => header,
                 Err(source) => return ResponseFuture::error(source),
@@ -46,10 +46,9 @@ impl<'a> DeleteInvite<'a> {
     }
 }
 
-impl<'a> AuditLogReason for DeleteInvite<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for DeleteInvite<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }

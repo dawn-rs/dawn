@@ -18,7 +18,7 @@ use twilight_model::id::{GuildId, UserId};
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 ///
 /// let guild_id = GuildId(100);
 /// let user_id = UserId(200);
@@ -30,7 +30,7 @@ pub struct DeleteBan<'a> {
     guild_id: GuildId,
     http: &'a Client,
     user_id: UserId,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 impl<'a> DeleteBan<'a> {
@@ -65,10 +65,9 @@ impl<'a> DeleteBan<'a> {
     }
 }
 
-impl<'a> AuditLogReason for DeleteBan<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for DeleteBan<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }

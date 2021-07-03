@@ -10,7 +10,7 @@ use twilight_model::id::{ChannelId, MessageId};
 /// Remove all reactions of a specified emoji from a message.
 pub struct DeleteAllReaction<'a> {
     channel_id: ChannelId,
-    emoji: RequestReactionType,
+    emoji: &'a RequestReactionType<'a>,
     http: &'a Client,
     message_id: MessageId,
 }
@@ -20,7 +20,7 @@ impl<'a> DeleteAllReaction<'a> {
         http: &'a Client,
         channel_id: ChannelId,
         message_id: MessageId,
-        emoji: RequestReactionType,
+        emoji: &'a RequestReactionType<'a>,
     ) -> Self {
         Self {
             channel_id,
@@ -37,7 +37,7 @@ impl<'a> DeleteAllReaction<'a> {
         let request = Request::from_route(Route::DeleteMessageSpecificReaction {
             channel_id: self.channel_id.0,
             message_id: self.message_id.0,
-            emoji: self.emoji.display().to_string(),
+            emoji: self.emoji,
         });
 
         self.http.request(request)

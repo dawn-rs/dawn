@@ -10,7 +10,7 @@ use twilight_model::{channel::Channel, id::ChannelId};
 pub struct DeleteChannel<'a> {
     channel_id: ChannelId,
     http: &'a Client,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 impl<'a> DeleteChannel<'a> {
@@ -43,10 +43,9 @@ impl<'a> DeleteChannel<'a> {
     }
 }
 
-impl<'a> AuditLogReason for DeleteChannel<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for DeleteChannel<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }
