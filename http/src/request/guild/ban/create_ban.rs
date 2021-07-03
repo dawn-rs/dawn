@@ -1,8 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, AuditLogReason, AuditLogReasonError, PendingResponse, Request},
-    response::marker::EmptyBody,
+    request::{validate, AuditLogReason, AuditLogReasonError, Request},
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use std::{
@@ -88,12 +87,12 @@ struct CreateBanFields {
 /// client.create_ban(guild_id, user_id)
 ///     .delete_message_days(1)?
 ///     .reason("memes")?
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
 pub struct CreateBan<'a> {
     fields: CreateBanFields,
-    fut: Option<PendingResponse<'a, EmptyBody>>,
     guild_id: GuildId,
     http: &'a Client,
     user_id: UserId,
@@ -103,7 +102,6 @@ impl<'a> CreateBan<'a> {
     pub(crate) fn new(http: &'a Client, guild_id: GuildId, user_id: UserId) -> Self {
         Self {
             fields: CreateBanFields::default(),
-            fut: None,
             guild_id,
             http,
             user_id,
@@ -130,17 +128,18 @@ impl<'a> CreateBan<'a> {
         Ok(self)
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
         let request = Request::from_route(Route::CreateBan {
             delete_message_days: self.fields.delete_message_days,
             guild_id: self.guild_id.0,
-            reason: self.fields.reason.clone(),
+            reason: self.fields.reason,
             user_id: self.user_id.0,
         });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
 
@@ -153,5 +152,3 @@ impl<'a> AuditLogReason for CreateBan<'a> {
         Ok(self)
     }
 }
-
-poll_req!(CreateBan<'_>, EmptyBody);

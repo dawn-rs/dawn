@@ -51,7 +51,7 @@ impl ClientBuilder {
                 proxy: self.proxy,
                 ratelimiter: self.ratelimiter,
                 timeout: self.timeout,
-                token_invalid: AtomicBool::new(false),
+                token_invalid: Arc::new(AtomicBool::new(false)),
                 token: self.token,
                 application_id: self.application_id,
                 default_allowed_mentions: self.default_allowed_mentions,

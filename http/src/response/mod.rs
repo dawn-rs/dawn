@@ -6,6 +6,9 @@
 //! an [iterator of the response headers][`headers`], or
 //! [deserializing the body into a model][`model`].
 //!
+//! The [`ResponseFuture`] is a type implementing [`Future`] that resolves to a
+//! [`Response`] when polled or `.await`ed to completion.
+//!
 //! # Examples
 //!
 //! Get a user by ID, check if the request was successful, and if so deserialize
@@ -20,7 +23,7 @@
 //! use twilight_http::Client;
 //!
 //! let client = Client::new(env::var("DISCORD_TOKEN")?);
-//! let response = client.user(user_id).await?;
+//! let response = client.user(user_id).exec().await?;
 //!
 //! if !response.status().is_success() {
 //!     println!("failed to get user");
@@ -36,15 +39,17 @@
 //! # Ok(()) }
 //! ```
 //!
+//! [`Future`]: std::future::Future
 //! [`bytes`]: Response::bytes
 //! [`headers`]: Response::headers
 //! [`model`]: Response::model
 
 pub mod marker;
 
+mod future;
 mod status_code;
 
-pub use self::status_code::StatusCode;
+pub use self::{future::ResponseFuture, status_code::StatusCode};
 
 use self::marker::{ListBody, MemberBody, MemberListBody};
 use super::json::JsonDeserializer;
@@ -157,7 +162,7 @@ pub enum DeserializeBodyErrorType {
 /// use twilight_http::Client;
 ///
 /// let client = Client::new(env::var("DISCORD_TOKEN")?);
-/// let response = client.user(user_id).await?;
+/// let response = client.user(user_id).exec().await?;
 /// println!("status code: {}", response.status());
 ///
 /// let user = response.model().await?;
@@ -213,7 +218,7 @@ impl<T> Response<T> {
     /// use twilight_http::Client;
     ///
     /// let client = Client::new(env::var("DISCORD_TOKEN")?);
-    /// let response = client.user(user_id).await?;
+    /// let response = client.user(user_id).exec().await?;
     /// let bytes = response.bytes().await?;
     ///
     /// println!("size of body: {}", bytes.len());
@@ -264,7 +269,7 @@ impl<T> Response<T> {
     /// use twilight_http::Client;
     ///
     /// let client = Client::new(env::var("DISCORD_TOKEN")?);
-    /// let response = client.current_user().await?;
+    /// let response = client.current_user().exec().await?;
     /// let text = response.text().await?;
     ///
     /// println!("body: {}", text);
@@ -390,7 +395,10 @@ impl Response<MemberListBody> {
 /// use twilight_http::Client;
 ///
 /// let client = Client::new(env::var("DISCORD_TOKEN")?);
-/// let response = client.create_message(channel_id).content("test")?.await?;
+/// let response = client.create_message(channel_id)
+//      .content("test")?
+///     .exec()
+///     .await?;
 /// let mut headers = response.headers();
 ///
 /// while let Some((name, value)) = headers.next() {
@@ -441,7 +449,7 @@ impl<'a> Iterator for HeaderIter<'a> {
 /// use twilight_http::Client;
 ///
 /// let client = Client::new(env::var("DISCORD_TOKEN")?);
-/// let response = client.message(channel_id, message_id).await?;
+/// let response = client.message(channel_id, message_id).exec().await?;
 /// let bytes = response.bytes().await?;
 ///
 /// println!("bytes of the body: {:?}", bytes);
@@ -491,7 +499,7 @@ impl Future for BytesFuture {
 /// use twilight_http::Client;
 ///
 /// let client = Client::new(env::var("DISCORD_TOKEN")?);
-/// let emoji = client.emoji(guild_id, emoji_id).await?.model().await?;
+/// let emoji = client.emoji(guild_id, emoji_id).exec().await?.model().await?;
 ///
 /// println!("emoji name: {}", emoji.name);
 /// # Ok(()) }
@@ -554,7 +562,11 @@ impl<T: DeserializeOwned + Unpin> Future for ModelFuture<T> {
 ///
 /// let client = Client::new(env::var("DISCORD_TOKEN")?);
 ///
-/// let member = client.guild_member(guild_id, user_id).await?.model().await?;
+/// let member = client.guild_member(guild_id, user_id)
+///     .exec()
+///     .await?
+///     .model()
+///     .await?;
 ///
 /// println!("is member deaf?: {}", member.deaf);
 /// # Ok(()) }
@@ -627,6 +639,7 @@ impl Future for MemberFuture {
 /// let client = Client::new(env::var("DISCORD_TOKEN")?);
 /// let members = client.guild_members(guild_id)
 ///     .limit(100)?
+///     .exec()
 ///     .await?
 ///     .models()
 ///     .await?;
@@ -704,7 +717,7 @@ impl Future for MemberListFuture {
 /// use twilight_http::Client;
 ///
 /// let client = Client::new(env::var("DISCORD_TOKEN")?);
-/// let response = client.message(channel_id, message_id).await?;
+/// let response = client.message(channel_id, message_id).exec().await?;
 /// let text = response.text().await?;
 ///
 /// println!("body: {}", text);

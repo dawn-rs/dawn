@@ -1,20 +1,14 @@
 use crate::{
     client::Client,
     error::Error as HttpError,
-    request::{
-        self, validate, AuditLogReason, AuditLogReasonError, NullableField, PendingResponse,
-        Request,
-    },
-    response::{marker::MemberBody, Response},
+    request::{self, validate, AuditLogReason, AuditLogReasonError, NullableField, Request},
+    response::{marker::MemberBody, ResponseFuture},
     routing::Route,
 };
 use serde::Serialize;
 use std::{
     error::Error,
     fmt::{Display, Formatter, Result as FmtResult},
-    future::Future,
-    pin::Pin,
-    task::{Context, Poll},
 };
 use twilight_model::id::{ChannelId, GuildId, RoleId, UserId};
 
@@ -91,7 +85,6 @@ struct UpdateGuildMemberFields {
 /// [the discord docs]: https://discord.com/developers/docs/resources/guild#modify-guild-member
 pub struct UpdateGuildMember<'a> {
     fields: UpdateGuildMemberFields,
-    fut: Option<PendingResponse<'a, MemberBody>>,
     guild_id: GuildId,
     http: &'a Client,
     user_id: UserId,
@@ -102,7 +95,6 @@ impl<'a> UpdateGuildMember<'a> {
     pub(crate) fn new(http: &'a Client, guild_id: GuildId, user_id: UserId) -> Self {
         Self {
             fields: UpdateGuildMemberFields::default(),
-            fut: None,
             guild_id,
             http,
             user_id,
@@ -183,11 +175,19 @@ impl<'a> UpdateGuildMember<'a> {
         Ok(request.build())
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
-        let request = self.request()?;
-        self.fut.replace(Box::pin(self.http.request(request)));
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<MemberBody> {
+        let request = match self.request() {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
+        let mut future = self.http.request(request);
+        future.set_guild_id(self.guild_id);
+
+        future
     }
 }
 
@@ -197,26 +197,6 @@ impl<'a> AuditLogReason for UpdateGuildMember<'a> {
             .replace(AuditLogReasonError::validate(reason.into())?);
 
         Ok(self)
-    }
-}
-
-impl Future for UpdateGuildMember<'_> {
-    type Output = Result<Response<MemberBody>, HttpError>;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        loop {
-            if let Some(fut) = self.as_mut().fut.as_mut() {
-                return fut.as_mut().poll(cx).map_ok(|mut res| {
-                    res.set_guild_id(self.guild_id);
-
-                    res
-                });
-            }
-
-            if let Err(why) = self.as_mut().start() {
-                return Poll::Ready(Err(why));
-            }
-        }
     }
 }
 

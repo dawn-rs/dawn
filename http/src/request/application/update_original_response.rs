@@ -3,8 +3,8 @@
 use crate::{
     client::Client,
     error::Error as HttpError,
-    request::{validate, Form, NullableField, PendingResponse, Request},
-    response::marker::EmptyBody,
+    request::{validate, Form, NullableField, Request},
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use serde::Serialize;
@@ -148,6 +148,7 @@ struct UpdateOriginalResponseFields {
 ///     // mentioned.
 ///     .allowed_mentions(AllowedMentions::default())
 ///     .content(Some("test <@3>".to_owned()))?
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
@@ -157,7 +158,6 @@ pub struct UpdateOriginalResponse<'a> {
     application_id: ApplicationId,
     fields: UpdateOriginalResponseFields,
     files: Vec<(String, Vec<u8>)>,
-    fut: Option<PendingResponse<'a, EmptyBody>>,
     http: &'a Client,
     token: String,
 }
@@ -178,7 +178,6 @@ impl<'a> UpdateOriginalResponse<'a> {
                 ..UpdateOriginalResponseFields::default()
             },
             files: Vec::new(),
-            fut: None,
             http,
             token: interaction_token.into(),
         }
@@ -281,6 +280,7 @@ impl<'a> UpdateOriginalResponse<'a> {
     ///
     /// client.update_interaction_original("token")?
     ///     .embeds(Some(vec![embed]))?
+    ///     .exec()
     ///     .await?;
     /// # Ok(()) }
     /// ```
@@ -393,12 +393,10 @@ impl<'a> UpdateOriginalResponse<'a> {
         Ok(request.build())
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
-        let request = self.request()?;
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+    pub fn exec(mut self) -> ResponseFuture<EmptyBody> {
+        match self.request() {
+            Ok(request) => self.http.request(request),
+            Err(source) => ResponseFuture::error(source),
+        }
     }
 }
-
-poll_req!(UpdateOriginalResponse<'_>, EmptyBody);

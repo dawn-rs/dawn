@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{self, AuditLogReason, AuditLogReasonError, NullableField, PendingResponse, Request},
+    request::{self, AuditLogReason, AuditLogReasonError, NullableField, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
@@ -23,7 +23,6 @@ struct UpdateWebhookFields {
 /// Update a webhook by ID.
 pub struct UpdateWebhook<'a> {
     fields: UpdateWebhookFields,
-    fut: Option<PendingResponse<'a, Webhook>>,
     http: &'a Client,
     webhook_id: WebhookId,
     reason: Option<String>,
@@ -34,7 +33,6 @@ impl<'a> UpdateWebhook<'a> {
     pub(crate) fn new(http: &'a Client, webhook_id: WebhookId) -> Self {
         Self {
             fields: UpdateWebhookFields::default(),
-            fut: None,
             http,
             webhook_id,
             reason: None,
@@ -72,21 +70,30 @@ impl<'a> UpdateWebhook<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Webhook> {
         let mut request = Request::builder(Route::UpdateWebhook {
             token: None,
             webhook_id: self.webhook_id.0,
-        })
-        .json(&self.fields)?;
+        });
+
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
         if let Some(reason) = self.reason.as_ref() {
-            request = request.headers(request::audit_header(reason)?);
+            let header = match request::audit_header(reason) {
+                Ok(header) => header,
+                Err(source) => return ResponseFuture::error(source),
+            };
+
+            request = request.headers(header);
         }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+        self.http.request(request.build())
     }
 }
 
@@ -98,5 +105,3 @@ impl<'a> AuditLogReason for UpdateWebhook<'a> {
         Ok(self)
     }
 }
-
-poll_req!(UpdateWebhook<'_>, Webhook);

@@ -1,28 +1,21 @@
-use crate::{
-    client::Client,
-    error::Error,
-    request::{PendingResponse, Request},
-    routing::Route,
-};
+use crate::{client::Client, request::Request, response::ResponseFuture, routing::Route};
 use twilight_model::oauth::CurrentApplicationInfo;
 
 pub struct GetUserApplicationInfo<'a> {
-    fut: Option<PendingResponse<'a, CurrentApplicationInfo>>,
     http: &'a Client,
 }
 
 impl<'a> GetUserApplicationInfo<'a> {
-    pub(crate) fn new(http: &'a Client) -> Self {
-        Self { fut: None, http }
+    pub(crate) const fn new(http: &'a Client) -> Self {
+        Self { http }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<CurrentApplicationInfo> {
         let request = Request::from_route(Route::GetCurrentUserApplicationInfo);
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(GetUserApplicationInfo<'_>, CurrentApplicationInfo);

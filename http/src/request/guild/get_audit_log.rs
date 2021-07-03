@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, PendingResponse, Request},
+    request::{validate, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use std::{
@@ -85,12 +85,12 @@ struct GetAuditLogFields {
 /// let audit_log = client
 /// // not done
 ///     .audit_log(guild_id)
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
 pub struct GetAuditLog<'a> {
     fields: GetAuditLogFields,
-    fut: Option<PendingResponse<'a, AuditLog>>,
     guild_id: GuildId,
     http: &'a Client,
 }
@@ -99,7 +99,6 @@ impl<'a> GetAuditLog<'a> {
     pub(crate) fn new(http: &'a Client, guild_id: GuildId) -> Self {
         Self {
             fields: GetAuditLogFields::default(),
-            fut: None,
             guild_id,
             http,
         }
@@ -148,7 +147,10 @@ impl<'a> GetAuditLog<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<AuditLog> {
         let request = Request::from_route(Route::GetAuditLogs {
             action_type: self.fields.action_type.map(|x| x as u64),
             before: self.fields.before,
@@ -157,10 +159,6 @@ impl<'a> GetAuditLog<'a> {
             user_id: self.fields.user_id.map(|x| x.0),
         });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(GetAuditLog<'_>, AuditLog);

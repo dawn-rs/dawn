@@ -1,8 +1,8 @@
 use crate::{
     client::Client,
     error::Error,
-    request::{self, AuditLogReason, AuditLogReasonError, PendingResponse, Request},
-    response::marker::EmptyBody,
+    request::{self, AuditLogReason, AuditLogReasonError, Request},
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use twilight_model::id::{MessageId, WebhookId};
@@ -22,11 +22,11 @@ use twilight_model::id::{MessageId, WebhookId};
 /// client
 ///     .delete_webhook_message(WebhookId(1), "token here", MessageId(2))
 ///     .reason("reason here")?
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
 pub struct DeleteWebhookMessage<'a> {
-    fut: Option<PendingResponse<'a, EmptyBody>>,
     http: &'a Client,
     message_id: MessageId,
     reason: Option<String>,
@@ -42,7 +42,6 @@ impl<'a> DeleteWebhookMessage<'a> {
         message_id: MessageId,
     ) -> Self {
         Self {
-            fut: None,
             http,
             message_id,
             reason: None,
@@ -51,10 +50,10 @@ impl<'a> DeleteWebhookMessage<'a> {
         }
     }
 
-    fn request(&self) -> Result<Request, Error> {
+    fn request(self) -> Result<(Request, &'a Client), Error> {
         let mut request = Request::builder(Route::DeleteWebhookMessage {
             message_id: self.message_id.0,
-            token: self.token.clone(),
+            token: self.token,
             webhook_id: self.webhook_id.0,
         })
         .use_authorization_token(false);
@@ -63,14 +62,17 @@ impl<'a> DeleteWebhookMessage<'a> {
             request = request.headers(request::audit_header(reason)?);
         }
 
-        Ok(request.build())
+        Ok((request.build(), self.http))
     }
 
-    fn start(&mut self) -> Result<(), Error> {
-        let request = self.request()?;
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
+        match self.request() {
+            Ok((request, client)) => client.request(request),
+            Err(source) => ResponseFuture::error(source),
+        }
     }
 }
 
@@ -83,8 +85,6 @@ impl<'a> AuditLogReason for DeleteWebhookMessage<'a> {
     }
 }
 
-poll_req!(DeleteWebhookMessage<'_>, EmptyBody);
-
 #[cfg(test)]
 mod tests {
     use super::DeleteWebhookMessage;
@@ -95,7 +95,7 @@ mod tests {
     fn test_request() {
         let client = Client::new("token");
         let builder = DeleteWebhookMessage::new(&client, WebhookId(1), "token", MessageId(2));
-        let actual = builder.request().expect("failed to create request");
+        let (actual, _) = builder.request().expect("failed to create request");
 
         let expected = Request::from_route(Route::DeleteWebhookMessage {
             message_id: 2,

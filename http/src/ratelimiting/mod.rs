@@ -8,19 +8,19 @@ pub use self::{
     headers::RatelimitHeaders,
 };
 
+use self::bucket::{Bucket, BucketQueueTask, TimeRemaining};
 use crate::routing::Path;
-use bucket::{Bucket, BucketQueueTask, TimeRemaining};
 use std::{
     collections::hash_map::{Entry, HashMap},
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc,
+        Arc, Mutex,
     },
     time::Duration,
 };
 use tokio::sync::{
     oneshot::{self, Receiver, Sender},
-    Mutex,
+    Mutex as AsyncMutex,
 };
 
 /// Global lock. We use a pair to avoid actually locking the mutex every check.
@@ -28,7 +28,7 @@ use tokio::sync::{
 /// is in place by, in turn, waiting for a guard, and then each immediately
 /// dropping it.
 #[derive(Debug, Default)]
-struct GlobalLockPair(Mutex<()>, AtomicBool);
+struct GlobalLockPair(AsyncMutex<()>, AtomicBool);
 
 impl GlobalLockPair {
     pub fn lock(&self) {
@@ -59,12 +59,17 @@ impl Ratelimiter {
         Self::default()
     }
 
+    #[deprecated(since = "0.5.0", note = "use `ticket` instead, which is not async")]
     pub async fn get(&self, path: Path) -> Receiver<Sender<Option<RatelimitHeaders>>> {
+        self.ticket(path)
+    }
+
+    pub fn ticket(&self, path: Path) -> Receiver<Sender<Option<RatelimitHeaders>>> {
         #[cfg(feature = "tracing")]
         tracing::debug!("getting bucket for path: {:?}", path);
 
         let (tx, rx) = oneshot::channel();
-        let (bucket, fresh) = self.entry(path.clone(), tx).await;
+        let (bucket, fresh) = self.entry(path.clone(), tx);
 
         if fresh {
             tokio::spawn(
@@ -87,20 +92,21 @@ impl Ratelimiter {
     /// This method is not guaranteed to be accurate and may return
     /// None if either no ratelimit is known or buckets are remaining.
     pub async fn time_until_available(&self, path: &Path) -> Option<Duration> {
-        let buckets = self.buckets.lock().await;
-        match buckets.get(path)?.time_remaining().await {
+        let buckets = self.buckets.lock().expect("ratelimit buckets poisoned");
+
+        match buckets.get(path)?.time_remaining() {
             TimeRemaining::Finished | TimeRemaining::NotStarted => None,
             TimeRemaining::Some(duration) => Some(duration),
         }
     }
 
-    async fn entry(
+    fn entry(
         &self,
         path: Path,
         tx: Sender<Sender<Option<RatelimitHeaders>>>,
     ) -> (Arc<Bucket>, bool) {
         // nb: not realisically point of contention
-        let mut buckets = self.buckets.lock().await;
+        let mut buckets = self.buckets.lock().expect("ratelimit buckets poisoned");
 
         match buckets.entry(path.clone()) {
             Entry::Occupied(bucket) => {
@@ -117,7 +123,7 @@ impl Ratelimiter {
             Entry::Vacant(entry) => {
                 #[cfg(feature = "tracing")]
                 tracing::debug!("making new bucket for path: {:?}", path);
-                let bucket = Bucket::new(path.clone());
+                let bucket = Bucket::new(path);
                 bucket.queue.push(tx);
 
                 let bucket = Arc::new(bucket);

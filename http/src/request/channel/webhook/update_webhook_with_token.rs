@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{NullableField, PendingResponse, Request},
+    request::{NullableField, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
@@ -18,7 +18,6 @@ struct UpdateWebhookWithTokenFields {
 /// Update a webhook, with a token, by ID.
 pub struct UpdateWebhookWithToken<'a> {
     fields: UpdateWebhookWithTokenFields,
-    fut: Option<PendingResponse<'a, Webhook>>,
     http: &'a Client,
     token: String,
     webhook_id: WebhookId,
@@ -28,7 +27,6 @@ impl<'a> UpdateWebhookWithToken<'a> {
     pub(crate) fn new(http: &'a Client, webhook_id: WebhookId, token: impl Into<String>) -> Self {
         Self {
             fields: UpdateWebhookWithTokenFields::default(),
-            fut: None,
             http,
             token: token.into(),
             webhook_id,
@@ -59,19 +57,21 @@ impl<'a> UpdateWebhookWithToken<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), Error> {
-        let request = Request::builder(Route::UpdateWebhook {
-            token: Some(self.token.clone()),
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Webhook> {
+        let mut request = Request::builder(Route::UpdateWebhook {
+            token: Some(self.token),
             webhook_id: self.webhook_id.0,
         })
-        .json(&self.fields)?
-        .use_authorization_token(false)
-        .build();
+        .use_authorization_token(false);
 
-        self.fut.replace(Box::pin(self.http.request(request)));
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(UpdateWebhookWithToken<'_>, Webhook);

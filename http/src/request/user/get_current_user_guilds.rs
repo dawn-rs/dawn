@@ -1,8 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, PendingResponse, Request},
-    response::marker::ListBody,
+    request::{validate, Request},
+    response::{marker::ListBody, ResponseFuture},
     routing::Route,
 };
 use std::{
@@ -93,24 +92,23 @@ struct GetCurrentUserGuildsFields {
 ///     .after(after)
 ///     .before(before)
 ///     .limit(25)?
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
 pub struct GetCurrentUserGuilds<'a> {
     fields: GetCurrentUserGuildsFields,
-    fut: Option<PendingResponse<'a, ListBody<CurrentUserGuild>>>,
     http: &'a Client,
 }
 
 impl<'a> GetCurrentUserGuilds<'a> {
-    pub(crate) fn new(http: &'a Client) -> Self {
+    pub(crate) const fn new(http: &'a Client) -> Self {
         Self {
             fields: GetCurrentUserGuildsFields {
                 after: None,
                 before: None,
                 limit: None,
             },
-            fut: None,
             http,
         }
     }
@@ -151,17 +149,16 @@ impl<'a> GetCurrentUserGuilds<'a> {
         Ok(self)
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<ListBody<CurrentUserGuild>> {
         let request = Request::from_route(Route::GetGuilds {
             after: self.fields.after.map(|x| x.0),
             before: self.fields.before.map(|x| x.0),
             limit: self.fields.limit,
         });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(GetCurrentUserGuilds<'_>, ListBody<CurrentUserGuild>);

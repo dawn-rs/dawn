@@ -3,11 +3,8 @@
 use crate::{
     client::Client,
     error::Error as HttpError,
-    request::{
-        self, validate, AuditLogReason, AuditLogReasonError, Form, NullableField, PendingResponse,
-        Request,
-    },
-    response::marker::EmptyBody,
+    request::{self, validate, AuditLogReason, AuditLogReasonError, Form, NullableField, Request},
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use serde::Serialize;
@@ -148,6 +145,7 @@ struct UpdateWebhookMessageFields {
 ///     // mentioned.
 ///     .allowed_mentions(AllowedMentions::default())
 ///     .content(Some("test <@3>".to_owned()))?
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
@@ -156,7 +154,6 @@ struct UpdateWebhookMessageFields {
 pub struct UpdateWebhookMessage<'a> {
     fields: UpdateWebhookMessageFields,
     files: Vec<(String, Vec<u8>)>,
-    fut: Option<PendingResponse<'a, EmptyBody>>,
     http: &'a Client,
     message_id: MessageId,
     reason: Option<String>,
@@ -180,7 +177,6 @@ impl<'a> UpdateWebhookMessage<'a> {
                 ..UpdateWebhookMessageFields::default()
             },
             files: Vec::new(),
-            fut: None,
             http,
             message_id,
             reason: None,
@@ -282,6 +278,7 @@ impl<'a> UpdateWebhookMessage<'a> {
     ///
     /// client.update_webhook_message(WebhookId(1), "token", MessageId(2))
     ///     .embeds(Some(vec![embed]))?
+    ///     .exec()
     ///     .await?;
     /// # Ok(()) }
     /// ```
@@ -363,10 +360,10 @@ impl<'a> UpdateWebhookMessage<'a> {
         self
     }
 
-    fn request(&mut self) -> Result<Request, HttpError> {
+    fn request(self) -> Result<(Request, &'a Client), HttpError> {
         let mut request = Request::builder(Route::UpdateWebhookMessage {
             message_id: self.message_id.0,
-            token: self.token.clone(),
+            token: self.token,
             webhook_id: self.webhook_id.0,
         })
         .use_authorization_token(false);
@@ -374,8 +371,8 @@ impl<'a> UpdateWebhookMessage<'a> {
         if !self.files.is_empty() || self.fields.payload_json.is_some() {
             let mut form = Form::new();
 
-            for (index, (name, file)) in self.files.drain(..).enumerate() {
-                form.file(format!("{}", index).as_bytes(), name.as_bytes(), &file);
+            for (index, (name, file)) in self.files.iter().enumerate() {
+                form.file(format!("{}", index).as_bytes(), name.as_bytes(), file);
             }
 
             if let Some(payload_json) = &self.fields.payload_json {
@@ -394,14 +391,17 @@ impl<'a> UpdateWebhookMessage<'a> {
             request = request.headers(request::audit_header(reason)?);
         }
 
-        Ok(request.build())
+        Ok((request.build(), self.http))
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
-        let request = self.request()?;
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
+        match self.request() {
+            Ok((request, client)) => client.request(request),
+            Err(source) => ResponseFuture::error(source),
+        }
     }
 }
 
@@ -413,8 +413,6 @@ impl<'a> AuditLogReason for UpdateWebhookMessage<'a> {
         Ok(self)
     }
 }
-
-poll_req!(UpdateWebhookMessage<'_>, EmptyBody);
 
 #[cfg(test)]
 mod tests {
@@ -429,12 +427,12 @@ mod tests {
     #[test]
     fn test_request() {
         let client = Client::new("token");
-        let mut builder = UpdateWebhookMessage::new(&client, WebhookId(1), "token", MessageId(2))
+        let builder = UpdateWebhookMessage::new(&client, WebhookId(1), "token", MessageId(2))
             .content(Some("test".to_owned()))
             .expect("'test' content couldn't be set")
             .reason("reason")
             .expect("'reason' is not a valid reason");
-        let actual = builder.request().expect("failed to create request");
+        let (actual, _) = builder.request().expect("failed to create request");
 
         let body = UpdateWebhookMessageFields {
             allowed_mentions: None,

@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{self, validate, AuditLogReason, AuditLogReasonError, PendingResponse, Request},
+    request::{self, validate, AuditLogReason, AuditLogReasonError, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use std::{
@@ -80,7 +80,6 @@ struct CreateGuildPruneFields {
 pub struct CreateGuildPrune<'a> {
     fields: CreateGuildPruneFields,
     guild_id: GuildId,
-    fut: Option<PendingResponse<'a, GuildPrune>>,
     http: &'a Client,
     reason: Option<String>,
 }
@@ -89,7 +88,6 @@ impl<'a> CreateGuildPrune<'a> {
     pub(crate) fn new(http: &'a Client, guild_id: GuildId) -> Self {
         Self {
             fields: CreateGuildPruneFields::default(),
-            fut: None,
             guild_id,
             http,
             reason: None,
@@ -132,22 +130,27 @@ impl<'a> CreateGuildPrune<'a> {
         Ok(self)
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<GuildPrune> {
         let mut request = Request::builder(Route::CreateGuildPrune {
             compute_prune_count: self.fields.compute_prune_count,
             days: self.fields.days,
             guild_id: self.guild_id.0,
-            include_roles: self.fields.include_roles.clone(),
+            include_roles: self.fields.include_roles,
         });
 
         if let Some(reason) = self.reason.as_ref() {
-            request = request.headers(request::audit_header(reason)?);
+            let header = match request::audit_header(reason) {
+                Ok(header) => header,
+                Err(source) => return ResponseFuture::error(source),
+            };
+
+            request = request.headers(header);
         }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+        self.http.request(request.build())
     }
 }
 
@@ -159,5 +162,3 @@ impl<'a> AuditLogReason for CreateGuildPrune<'a> {
         Ok(self)
     }
 }
-
-poll_req!(CreateGuildPrune<'_>, GuildPrune);

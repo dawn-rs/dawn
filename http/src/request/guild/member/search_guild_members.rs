@@ -1,16 +1,12 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, PendingResponse, Request},
-    response::{marker::MemberListBody, Response},
+    request::{validate, Request},
+    response::{marker::MemberListBody, ResponseFuture},
     routing::Route,
 };
 use std::{
     error::Error,
     fmt::{Display, Formatter, Result as FmtResult},
-    future::Future,
-    pin::Pin,
-    task::{Context, Poll},
 };
 use twilight_model::id::GuildId;
 
@@ -89,7 +85,7 @@ struct SearchGuildMembersFields {
 /// let client = Client::new("my token");
 ///
 /// let guild_id = GuildId(100);
-/// let members = client.search_guild_members(guild_id, String::from("Wumpus")).limit(10)?.await?;
+/// let members = client.search_guild_members(guild_id, String::from("Wumpus")).limit(10)?.exec().await?;
 /// # Ok(()) }
 /// ```
 ///
@@ -101,7 +97,6 @@ struct SearchGuildMembersFields {
 /// [`GUILD_MEMBERS`]: twilight_model::gateway::Intents#GUILD_MEMBERS
 pub struct SearchGuildMembers<'a> {
     fields: SearchGuildMembersFields,
-    fut: Option<PendingResponse<'a, MemberListBody>>,
     guild_id: GuildId,
     http: &'a Client,
 }
@@ -111,10 +106,9 @@ impl<'a> SearchGuildMembers<'a> {
         Self::_new(http, guild_id, query.into())
     }
 
-    fn _new(http: &'a Client, guild_id: GuildId, query: String) -> Self {
+    const fn _new(http: &'a Client, guild_id: GuildId, query: String) -> Self {
         Self {
             fields: SearchGuildMembersFields { query, limit: None },
-            fut: None,
             guild_id,
             http,
         }
@@ -142,35 +136,19 @@ impl<'a> SearchGuildMembers<'a> {
         Ok(self)
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<MemberListBody> {
         let request = Request::from_route(Route::SearchGuildMembers {
             guild_id: self.guild_id.0,
             limit: self.fields.limit,
-            query: self.fields.query.clone(),
+            query: self.fields.query,
         });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
+        let mut future = self.http.request(request);
+        future.set_guild_id(self.guild_id);
 
-        Ok(())
-    }
-}
-
-impl Future for SearchGuildMembers<'_> {
-    type Output = Result<Response<MemberListBody>, HttpError>;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        loop {
-            if let Some(fut) = self.as_mut().fut.as_mut() {
-                return fut.as_mut().poll(cx).map_ok(|mut res| {
-                    res.set_guild_id(self.guild_id);
-
-                    res
-                });
-            }
-
-            if let Err(why) = self.as_mut().start() {
-                return Poll::Ready(Err(why));
-            }
-        }
+        future
     }
 }

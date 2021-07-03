@@ -1,8 +1,7 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{self, AuditLogReason, AuditLogReasonError, PendingResponse, Request},
-    response::marker::EmptyBody,
+    request::{self, AuditLogReason, AuditLogReasonError, Request},
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use twilight_model::id::WebhookId;
@@ -14,17 +13,15 @@ struct DeleteWebhookParams {
 /// Delete a webhook by its ID.
 pub struct DeleteWebhook<'a> {
     fields: DeleteWebhookParams,
-    fut: Option<PendingResponse<'a, EmptyBody>>,
     http: &'a Client,
     id: WebhookId,
     reason: Option<String>,
 }
 
 impl<'a> DeleteWebhook<'a> {
-    pub(crate) fn new(http: &'a Client, id: WebhookId) -> Self {
+    pub(crate) const fn new(http: &'a Client, id: WebhookId) -> Self {
         Self {
             fields: DeleteWebhookParams { token: None },
-            fut: None,
             http,
             id,
             reason: None,
@@ -38,20 +35,25 @@ impl<'a> DeleteWebhook<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
         let mut request = Request::builder(Route::DeleteWebhook {
             webhook_id: self.id.0,
-            token: self.fields.token.clone(),
+            token: self.fields.token,
         });
 
         if let Some(reason) = self.reason.as_ref() {
-            request = request.headers(request::audit_header(reason)?);
+            let header = match request::audit_header(reason) {
+                Ok(header) => header,
+                Err(source) => return ResponseFuture::error(source),
+            };
+
+            request = request.headers(header);
         }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+        self.http.request(request.build())
     }
 }
 
@@ -63,5 +65,3 @@ impl<'a> AuditLogReason for DeleteWebhook<'a> {
         Ok(self)
     }
 }
-
-poll_req!(DeleteWebhook<'_>, EmptyBody);

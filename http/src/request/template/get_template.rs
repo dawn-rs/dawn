@@ -1,14 +1,8 @@
-use crate::{
-    client::Client,
-    error::Error,
-    request::{PendingResponse, Request},
-    routing::Route,
-};
+use crate::{client::Client, request::Request, response::ResponseFuture, routing::Route};
 use twilight_model::template::Template;
 
 /// Get a template by its code.
 pub struct GetTemplate<'a> {
-    fut: Option<PendingResponse<'a, Template>>,
     http: &'a Client,
     template_code: String,
 }
@@ -18,23 +12,21 @@ impl<'a> GetTemplate<'a> {
         Self::_new(http, template_code.into())
     }
 
-    fn _new(http: &'a Client, template_code: String) -> Self {
+    const fn _new(http: &'a Client, template_code: String) -> Self {
         Self {
-            fut: None,
             http,
             template_code,
         }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Template> {
         let request = Request::from_route(Route::GetTemplate {
-            template_code: self.template_code.clone(),
+            template_code: self.template_code,
         });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(GetTemplate<'_>, Template);

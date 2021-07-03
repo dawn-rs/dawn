@@ -59,6 +59,7 @@ impl DayLimiter {
         let info = http
             .gateway()
             .authed()
+            .exec()
             .await
             .map_err(|source| DayLimiterError {
                 kind: DayLimiterErrorType::RetrievingSessionAvailability,
@@ -94,7 +95,7 @@ impl DayLimiter {
         } else {
             let wait = lock.last_check + lock.next_reset;
             time::sleep_until(wait).await;
-            if let Ok(res) = lock.http.gateway().authed().await {
+            if let Ok(res) = lock.http.gateway().authed().exec().await {
                 if let Ok(info) = res.model().await {
                     let last_check = Instant::now();
                     let next_reset = Duration::from_millis(info.session_start_limit.remaining);

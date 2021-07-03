@@ -1,8 +1,8 @@
 use crate::{
     client::Client,
     error::Error,
-    request::{PendingResponse, Request},
-    response::marker::EmptyBody,
+    request::Request,
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use twilight_model::{application::callback::InteractionResponse, id::InteractionId};
@@ -12,7 +12,6 @@ pub struct InteractionCallback<'a> {
     interaction_id: InteractionId,
     interaction_token: String,
     response: InteractionResponse,
-    fut: Option<PendingResponse<'a, EmptyBody>>,
     http: &'a Client,
 }
 
@@ -27,23 +26,26 @@ impl<'a> InteractionCallback<'a> {
             interaction_id,
             interaction_token: interaction_token.into(),
             response,
-            fut: None,
             http,
         }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
-        let request = Request::builder(Route::InteractionCallback {
+    fn request(&self) -> Result<Request, Error> {
+        Ok(Request::builder(Route::InteractionCallback {
             interaction_id: self.interaction_id.0,
             interaction_token: self.interaction_token.clone(),
         })
-        .json(&self.response)?;
+        .json(&self.response)?
+        .build())
+    }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
+        match self.request() {
+            Ok(request) => self.http.request(request),
+            Err(source) => ResponseFuture::error(source),
+        }
     }
 }
-
-poll_req!(InteractionCallback<'_>, EmptyBody);

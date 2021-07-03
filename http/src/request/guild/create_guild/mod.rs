@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, PendingResponse, Request},
+    request::{validate, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
@@ -238,7 +238,6 @@ impl From<VoiceFieldsBuilder> for VoiceFields {
 /// This endpoint can only be used by bots in less than 10 guilds.
 pub struct CreateGuild<'a> {
     fields: CreateGuildFields,
-    fut: Option<PendingResponse<'a, PartialGuild>>,
     http: &'a Client,
 }
 
@@ -268,7 +267,6 @@ impl<'a> CreateGuild<'a> {
                 system_channel_flags: None,
                 verification_level: None,
             },
-            fut: None,
             http,
         })
     }
@@ -336,7 +334,10 @@ impl<'a> CreateGuild<'a> {
     ///     .add_category_builder(category)
     ///     .build();
     ///
-    /// let guild = client.create_guild("guild name")?.channels(channels)?.await?;
+    /// let guild = client.create_guild("guild name")?
+    ///     .channels(channels)?
+    ///     .exec()
+    ///     .await?;
     /// # Ok(()) }
     /// ```
     ///
@@ -448,7 +449,7 @@ impl<'a> CreateGuild<'a> {
     /// # let client = Client::new("my token");
     ///
     /// let roles = vec![RoleFieldsBuilder::new("role 1").color(0x543923)?.build()];
-    /// client.create_guild("guild name")?.roles(roles)?.await?;
+    /// client.create_guild("guild name")?.roles(roles)?.exec().await?;
     /// # Ok(()) }
     /// ```
     ///
@@ -475,15 +476,17 @@ impl<'a> CreateGuild<'a> {
         Ok(self)
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
-        let request = Request::builder(Route::CreateGuild)
-            .json(&self.fields)?
-            .build();
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<PartialGuild> {
+        let mut request = Request::builder(Route::CreateGuild);
 
-        self.fut.replace(Box::pin(self.http.request(request)));
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(CreateGuild<'_>, PartialGuild);

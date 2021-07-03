@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{self, validate, AuditLogReason, AuditLogReasonError, PendingResponse, Request},
+    request::{self, validate, AuditLogReason, AuditLogReasonError, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
@@ -113,7 +113,6 @@ struct CreateGuildChannelFields {
 /// and the maximum is 100 UTF-16 characters.
 pub struct CreateGuildChannel<'a> {
     fields: CreateGuildChannelFields,
-    fut: Option<PendingResponse<'a, GuildChannel>>,
     guild_id: GuildId,
     http: &'a Client,
     reason: Option<String>,
@@ -152,7 +151,6 @@ impl<'a> CreateGuildChannel<'a> {
                 topic: None,
                 user_limit: None,
             },
-            fut: None,
             guild_id,
             http,
             reason: None,
@@ -277,20 +275,29 @@ impl<'a> CreateGuildChannel<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<GuildChannel> {
         let mut request = Request::builder(Route::CreateChannel {
             guild_id: self.guild_id.0,
-        })
-        .json(&self.fields)?;
+        });
+
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
         if let Some(reason) = self.reason.as_ref() {
-            request = request.headers(request::audit_header(reason)?);
+            let header = match request::audit_header(reason) {
+                Ok(header) => header,
+                Err(source) => return ResponseFuture::error(source),
+            };
+
+            request = request.headers(header);
         }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+        self.http.request(request.build())
     }
 }
 
@@ -302,5 +309,3 @@ impl<'a> AuditLogReason for CreateGuildChannel<'a> {
         Ok(self)
     }
 }
-
-poll_req!(CreateGuildChannel<'_>, GuildChannel);

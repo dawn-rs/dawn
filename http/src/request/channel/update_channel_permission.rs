@@ -28,6 +28,7 @@ use twilight_model::{
 ///
 /// client.update_channel_permission(channel_id, allow, deny)
 ///     .role(role_id)
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
@@ -63,7 +64,10 @@ impl<'a> UpdateChannelPermission<'a> {
         self.configure(&PermissionOverwriteType::Role(role_id.into()))
     }
 
-    fn configure(self, target: &PermissionOverwriteType) -> UpdateChannelPermissionConfigured<'a> {
+    const fn configure(
+        self,
+        target: &PermissionOverwriteType,
+    ) -> UpdateChannelPermissionConfigured<'a> {
         UpdateChannelPermissionConfigured::new(
             self.http,
             self.channel_id,

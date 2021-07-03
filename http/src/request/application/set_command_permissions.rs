@@ -3,8 +3,9 @@ use crate::{
     error::Error,
     request::{
         application::{InteractionError, InteractionErrorType},
-        validate, PendingResponse, Request,
+        validate, Request,
     },
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
@@ -28,7 +29,6 @@ pub struct SetCommandPermissions<'a> {
     application_id: ApplicationId,
     guild_id: GuildId,
     fields: Vec<PartialGuildCommandPermissions>,
-    fut: Option<PendingResponse<'a, CommandPermissions>>,
     http: &'a Client,
 }
 
@@ -69,26 +69,29 @@ impl<'a> SetCommandPermissions<'a> {
             application_id,
             guild_id,
             fields,
-            fut: None,
             http,
         })
     }
 
-    fn start(&mut self) -> Result<(), Error> {
-        let request = Request::builder(Route::SetCommandPermissions {
+    fn request(&self) -> Result<Request, Error> {
+        Ok(Request::builder(Route::SetCommandPermissions {
             application_id: self.application_id.0,
             guild_id: self.guild_id.0,
         })
-        .json(&self.fields)?;
+        .json(&self.fields)?
+        .build())
+    }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<CommandPermissions> {
+        match self.request() {
+            Ok(request) => self.http.request(request),
+            Err(source) => ResponseFuture::error(source),
+        }
     }
 }
-
-poll_req!(SetCommandPermissions<'_>, CommandPermissions);
 
 #[cfg(test)]
 mod tests {

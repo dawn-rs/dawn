@@ -1,9 +1,4 @@
-use crate::{
-    client::Client,
-    error::Error,
-    request::{PendingResponse, Request},
-    routing::Route,
-};
+use crate::{client::Client, request::Request, response::ResponseFuture, routing::Route};
 use serde::Serialize;
 use twilight_model::{
     id::GuildId,
@@ -27,7 +22,6 @@ struct UpdateGuildWelcomeScreenFields {
 /// [`MANAGE_GUILD`]: twilight_model::guild::Permissions::MANAGE_GUILD
 pub struct UpdateGuildWelcomeScreen<'a> {
     fields: UpdateGuildWelcomeScreenFields,
-    fut: Option<PendingResponse<'a, WelcomeScreen>>,
     guild_id: GuildId,
     http: &'a Client,
 }
@@ -36,7 +30,6 @@ impl<'a> UpdateGuildWelcomeScreen<'a> {
     pub(crate) fn new(http: &'a Client, guild_id: GuildId) -> Self {
         Self {
             fields: UpdateGuildWelcomeScreenFields::default(),
-            fut: None,
             guild_id,
             http,
         }
@@ -70,17 +63,19 @@ impl<'a> UpdateGuildWelcomeScreen<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), Error> {
-        let request = Request::builder(Route::UpdateGuildWelcomeScreen {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<WelcomeScreen> {
+        let mut request = Request::builder(Route::UpdateGuildWelcomeScreen {
             guild_id: self.guild_id.0,
-        })
-        .json(&self.fields)?
-        .build();
+        });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(UpdateGuildWelcomeScreen<'_>, WelcomeScreen);

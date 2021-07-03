@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, PendingResponse, Request},
+    request::{validate, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
@@ -81,7 +81,6 @@ struct AddGuildMemberFields {
 
 pub struct AddGuildMember<'a> {
     fields: AddGuildMemberFields,
-    fut: Option<PendingResponse<'a, PartialMember>>,
     guild_id: GuildId,
     http: &'a Client,
     user_id: UserId,
@@ -103,7 +102,12 @@ impl<'a> AddGuildMember<'a> {
         Self::_new(http, guild_id, user_id, access_token.into())
     }
 
-    fn _new(http: &'a Client, guild_id: GuildId, user_id: UserId, access_token: String) -> Self {
+    const fn _new(
+        http: &'a Client,
+        guild_id: GuildId,
+        user_id: UserId,
+        access_token: String,
+    ) -> Self {
         Self {
             fields: AddGuildMemberFields {
                 access_token,
@@ -112,7 +116,6 @@ impl<'a> AddGuildMember<'a> {
                 nick: None,
                 roles: None,
             },
-            fut: None,
             guild_id,
             http,
             user_id,
@@ -166,18 +169,20 @@ impl<'a> AddGuildMember<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
-        let request = Request::builder(Route::AddGuildMember {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<PartialMember> {
+        let mut request = Request::builder(Route::AddGuildMember {
             guild_id: self.guild_id.0,
             user_id: self.user_id.0,
-        })
-        .json(&self.fields)?
-        .build();
+        });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(AddGuildMember<'_>, PartialMember);

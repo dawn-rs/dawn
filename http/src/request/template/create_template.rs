@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, PendingResponse, Request},
+    request::{validate, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
@@ -91,7 +91,6 @@ struct CreateTemplateFields {
 /// invalid.
 pub struct CreateTemplate<'a> {
     fields: CreateTemplateFields,
-    fut: Option<PendingResponse<'a, Template>>,
     guild_id: GuildId,
     http: &'a Client,
 }
@@ -122,7 +121,6 @@ impl<'a> CreateTemplate<'a> {
                 description: None,
             },
             guild_id,
-            fut: None,
             http,
         })
     }
@@ -151,17 +149,19 @@ impl<'a> CreateTemplate<'a> {
         Ok(self)
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
-        let request = Request::builder(Route::CreateTemplate {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Template> {
+        let mut request = Request::builder(Route::CreateTemplate {
             guild_id: self.guild_id.0,
-        })
-        .json(&self.fields)?
-        .build();
+        });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(CreateTemplate<'_>, Template);

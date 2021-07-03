@@ -1,9 +1,8 @@
 use super::RequestReactionType;
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, PendingResponse, Request},
-    response::marker::ListBody,
+    request::{validate, Request},
+    response::{marker::ListBody, ResponseFuture},
     routing::Route,
 };
 use std::{
@@ -77,7 +76,6 @@ pub struct GetReactions<'a> {
     channel_id: ChannelId,
     emoji: RequestReactionType,
     fields: GetReactionsFields,
-    fut: Option<PendingResponse<'a, ListBody<User>>>,
     http: &'a Client,
     message_id: MessageId,
 }
@@ -93,7 +91,6 @@ impl<'a> GetReactions<'a> {
             channel_id,
             emoji,
             fields: GetReactionsFields::default(),
-            fut: None,
             http,
             message_id,
         }
@@ -127,7 +124,10 @@ impl<'a> GetReactions<'a> {
         Ok(self)
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<ListBody<User>> {
         let request = Request::from_route(Route::GetReactionUsers {
             after: self.fields.after.map(|x| x.0),
             channel_id: self.channel_id.0,
@@ -136,10 +136,6 @@ impl<'a> GetReactions<'a> {
             message_id: self.message_id.0,
         });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(GetReactions<'_>, ListBody<User>);

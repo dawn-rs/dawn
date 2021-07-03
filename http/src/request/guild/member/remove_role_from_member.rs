@@ -1,15 +1,13 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{self, AuditLogReason, AuditLogReasonError, PendingResponse, Request},
-    response::marker::EmptyBody,
+    request::{self, AuditLogReason, AuditLogReasonError, Request},
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use twilight_model::id::{GuildId, RoleId, UserId};
 
 /// Remove a role from a member in a guild, by id.
 pub struct RemoveRoleFromMember<'a> {
-    fut: Option<PendingResponse<'a, EmptyBody>>,
     guild_id: GuildId,
     http: &'a Client,
     role_id: RoleId,
@@ -25,7 +23,6 @@ impl<'a> RemoveRoleFromMember<'a> {
         role_id: impl Into<RoleId>,
     ) -> Self {
         Self {
-            fut: None,
             guild_id: guild_id.into(),
             http,
             role_id: role_id.into(),
@@ -34,7 +31,10 @@ impl<'a> RemoveRoleFromMember<'a> {
         }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
         let mut request = Request::builder(Route::RemoveMemberRole {
             guild_id: self.guild_id.0,
             role_id: self.role_id.0,
@@ -42,13 +42,15 @@ impl<'a> RemoveRoleFromMember<'a> {
         });
 
         if let Some(reason) = self.reason.as_ref() {
-            request = request.headers(request::audit_header(reason)?);
+            let header = match request::audit_header(reason) {
+                Ok(header) => header,
+                Err(source) => return ResponseFuture::error(source),
+            };
+
+            request = request.headers(header);
         }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+        self.http.request(request.build())
     }
 }
 
@@ -60,5 +62,3 @@ impl<'a> AuditLogReason for RemoveRoleFromMember<'a> {
         Ok(self)
     }
 }
-
-poll_req!(RemoveRoleFromMember<'_>, EmptyBody);

@@ -1,8 +1,7 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{PendingResponse, Request},
-    response::marker::EmptyBody,
+    request::Request,
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use twilight_model::id::{ApplicationId, CommandId};
@@ -11,12 +10,11 @@ use twilight_model::id::{ApplicationId, CommandId};
 pub struct DeleteGlobalCommand<'a> {
     application_id: ApplicationId,
     command_id: CommandId,
-    fut: Option<PendingResponse<'a, EmptyBody>>,
     http: &'a Client,
 }
 
 impl<'a> DeleteGlobalCommand<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         http: &'a Client,
         application_id: ApplicationId,
         command_id: CommandId,
@@ -24,21 +22,19 @@ impl<'a> DeleteGlobalCommand<'a> {
         Self {
             application_id,
             command_id,
-            fut: None,
             http,
         }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
         let request = Request::from_route(Route::DeleteGlobalCommand {
             application_id: self.application_id.0,
             command_id: self.command_id.0,
         });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(DeleteGlobalCommand<'_>, EmptyBody);

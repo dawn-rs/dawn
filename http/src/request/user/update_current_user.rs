@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, NullableField, PendingResponse, Request},
+    request::{validate, NullableField, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
@@ -81,7 +81,6 @@ struct UpdateCurrentUserFields {
 /// rnadomized.
 pub struct UpdateCurrentUser<'a> {
     fields: UpdateCurrentUserFields,
-    fut: Option<PendingResponse<'a, User>>,
     http: &'a Client,
 }
 
@@ -89,7 +88,6 @@ impl<'a> UpdateCurrentUser<'a> {
     pub(crate) fn new(http: &'a Client) -> Self {
         Self {
             fields: UpdateCurrentUserFields::default(),
-            fut: None,
             http,
         }
     }
@@ -133,15 +131,17 @@ impl<'a> UpdateCurrentUser<'a> {
         Ok(self)
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
-        let request = Request::builder(Route::UpdateCurrentUser)
-            .json(&self.fields)?
-            .build();
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<User> {
+        let mut request = Request::builder(Route::UpdateCurrentUser);
 
-        self.fut.replace(Box::pin(self.http.request(request)));
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(UpdateCurrentUser<'_>, User);

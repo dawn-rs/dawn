@@ -1,8 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, PendingResponse, Request},
-    response::marker::EmptyBody,
+    request::{validate, Request},
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use serde::Serialize;
@@ -82,7 +81,6 @@ struct CreateStageInstanceFields {
 /// Requires the user to be a moderator of the stage channel.
 pub struct CreateStageInstance<'a> {
     fields: CreateStageInstanceFields,
-    fut: Option<PendingResponse<'a, EmptyBody>>,
     http: &'a Client,
 }
 
@@ -113,7 +111,6 @@ impl<'a> CreateStageInstance<'a> {
                 topic,
                 ..CreateStageInstanceFields::default()
             },
-            fut: None,
             http,
         })
     }
@@ -125,15 +122,17 @@ impl<'a> CreateStageInstance<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
-        let request = Request::builder(Route::CreateStageInstance)
-            .json(&self.fields)?
-            .build();
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
+        let mut request = Request::builder(Route::CreateStageInstance);
 
-        self.fut.replace(Box::pin(self.http.request(request)));
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(CreateStageInstance<'_>, EmptyBody);

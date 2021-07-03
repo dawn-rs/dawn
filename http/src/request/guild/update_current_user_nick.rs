@@ -1,8 +1,7 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{PendingResponse, Request},
-    response::marker::EmptyBody,
+    request::Request,
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use serde::Serialize;
@@ -16,7 +15,6 @@ struct UpdateCurrentUserNickFields {
 /// Changes the user's nickname in a guild.
 pub struct UpdateCurrentUserNick<'a> {
     fields: UpdateCurrentUserNickFields,
-    fut: Option<PendingResponse<'a, EmptyBody>>,
     guild_id: GuildId,
     http: &'a Client,
 }
@@ -25,23 +23,24 @@ impl<'a> UpdateCurrentUserNick<'a> {
     pub(crate) fn new(http: &'a Client, guild_id: GuildId, nick: impl Into<String>) -> Self {
         Self {
             fields: UpdateCurrentUserNickFields { nick: nick.into() },
-            fut: None,
             guild_id,
             http,
         }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
-        let request = Request::builder(Route::UpdateNickname {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
+        let mut request = Request::builder(Route::UpdateNickname {
             guild_id: self.guild_id.0,
-        })
-        .json(&self.fields)?
-        .build();
+        });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(UpdateCurrentUserNick<'_>, EmptyBody);

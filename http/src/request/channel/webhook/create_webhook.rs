@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{self, AuditLogReason, AuditLogReasonError, PendingResponse, Request},
+    request::{self, AuditLogReason, AuditLogReasonError, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
@@ -29,13 +29,13 @@ struct CreateWebhookFields {
 ///
 /// let webhook = client
 ///     .create_webhook(channel_id, "Twily Bot")
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
 pub struct CreateWebhook<'a> {
     channel_id: ChannelId,
     fields: CreateWebhookFields,
-    fut: Option<PendingResponse<'a, Webhook>>,
     http: &'a Client,
     reason: Option<String>,
 }
@@ -48,7 +48,6 @@ impl<'a> CreateWebhook<'a> {
                 avatar: None,
                 name: name.into(),
             },
-            fut: None,
             http,
             reason: None,
         }
@@ -67,20 +66,29 @@ impl<'a> CreateWebhook<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Webhook> {
         let mut request = Request::builder(Route::CreateWebhook {
             channel_id: self.channel_id.0,
-        })
-        .json(&self.fields)?;
+        });
+
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
         if let Some(reason) = self.reason.as_ref() {
-            request = request.headers(request::audit_header(reason)?);
+            let header = match request::audit_header(reason) {
+                Ok(header) => header,
+                Err(source) => return ResponseFuture::error(source),
+            };
+
+            request = request.headers(header);
         }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+        self.http.request(request.build())
     }
 }
 
@@ -92,5 +100,3 @@ impl<'a> AuditLogReason for CreateWebhook<'a> {
         Ok(self)
     }
 }
-
-poll_req!(CreateWebhook<'_>, Webhook);

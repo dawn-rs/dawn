@@ -1,10 +1,10 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
     request::{
         validate::{self, EmbedValidationError},
-        NullableField, PendingResponse, Request,
+        NullableField, Request,
     },
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
@@ -146,6 +146,7 @@ struct UpdateMessageFields {
 /// let client = Client::new("my token");
 /// client.update_message(ChannelId(1), MessageId(2))
 ///     .content("test update".to_owned())?
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
@@ -161,13 +162,13 @@ struct UpdateMessageFields {
 /// # let client = Client::new("my token");
 /// client.update_message(ChannelId(1), MessageId(2))
 ///     .content(None)?
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
 pub struct UpdateMessage<'a> {
     channel_id: ChannelId,
     fields: UpdateMessageFields,
-    fut: Option<PendingResponse<'a, Message>>,
     http: &'a Client,
     message_id: MessageId,
 }
@@ -177,7 +178,6 @@ impl<'a> UpdateMessage<'a> {
         Self {
             channel_id,
             fields: UpdateMessageFields::default(),
-            fut: None,
             http,
             message_id,
         }
@@ -337,18 +337,20 @@ impl<'a> UpdateMessage<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
-        let request = Request::builder(Route::UpdateMessage {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Message> {
+        let mut request = Request::builder(Route::UpdateMessage {
             channel_id: self.channel_id.0,
             message_id: self.message_id.0,
-        })
-        .json(&self.fields)?
-        .build();
+        });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(UpdateMessage<'_>, Message);

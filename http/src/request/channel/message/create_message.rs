@@ -4,8 +4,9 @@ use crate::{
     request::{
         multipart::Form,
         validate::{self, EmbedValidationError},
-        PendingResponse, Request,
+        Request,
     },
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
@@ -140,6 +141,7 @@ pub(crate) struct CreateMessageFields {
 ///     .create_message(channel_id)
 ///     .content("Twilight is best pony")?
 ///     .tts(true)
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
@@ -147,7 +149,6 @@ pub struct CreateMessage<'a> {
     channel_id: ChannelId,
     pub(crate) fields: CreateMessageFields,
     files: Vec<(String, Vec<u8>)>,
-    fut: Option<PendingResponse<'a, Message>>,
     http: &'a Client,
 }
 
@@ -160,7 +161,6 @@ impl<'a> CreateMessage<'a> {
                 ..CreateMessageFields::default()
             },
             files: Vec::new(),
-            fut: None,
             http,
         }
     }
@@ -336,7 +336,10 @@ impl<'a> CreateMessage<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Message> {
         let mut request = Request::builder(Route::CreateMessage {
             channel_id: self.channel_id.0,
         });
@@ -344,27 +347,29 @@ impl<'a> CreateMessage<'a> {
         if !self.files.is_empty() || self.fields.payload_json.is_some() {
             let mut form = Form::new();
 
-            for (index, (name, file)) in self.files.drain(..).enumerate() {
-                form.file(format!("{}", index).as_bytes(), name.as_bytes(), &file);
+            for (index, (name, file)) in self.files.iter().enumerate() {
+                form.file(format!("{}", index).as_bytes(), name.as_bytes(), file);
             }
 
             if let Some(payload_json) = &self.fields.payload_json {
                 form.payload_json(&payload_json);
             } else {
-                let body = crate::json::to_vec(&self.fields).map_err(HttpError::json)?;
+                let body = match crate::json::to_vec(&self.fields) {
+                    Ok(body) => body,
+                    Err(source) => return ResponseFuture::error(HttpError::json(source)),
+                };
+
                 form.payload_json(&body);
             }
 
             request = request.form(form);
         } else {
-            request = request.json(&self.fields)?;
+            request = match request.json(&self.fields) {
+                Ok(request) => request,
+                Err(source) => return ResponseFuture::error(source),
+            };
         }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(CreateMessage<'_>, Message);

@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, PendingResponse, Request},
+    request::{validate, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
@@ -82,7 +82,6 @@ struct CreateGuildFromTemplateFields {
 /// the name is invalid.
 pub struct CreateGuildFromTemplate<'a> {
     fields: CreateGuildFromTemplateFields,
-    fut: Option<PendingResponse<'a, Guild>>,
     http: &'a Client,
     template_code: String,
 }
@@ -109,7 +108,6 @@ impl<'a> CreateGuildFromTemplate<'a> {
 
         Ok(Self {
             fields: CreateGuildFromTemplateFields { name, icon: None },
-            fut: None,
             http,
             template_code,
         })
@@ -132,17 +130,19 @@ impl<'a> CreateGuildFromTemplate<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
-        let request = Request::builder(Route::CreateGuildFromTemplate {
-            template_code: self.template_code.clone(),
-        })
-        .json(&self.fields)?
-        .build();
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Guild> {
+        let mut request = Request::builder(Route::CreateGuildFromTemplate {
+            template_code: self.template_code,
+        });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(CreateGuildFromTemplate<'_>, Guild);

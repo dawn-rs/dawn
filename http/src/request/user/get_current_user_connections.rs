@@ -1,8 +1,7 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{PendingResponse, Request},
-    response::marker::ListBody,
+    request::Request,
+    response::{marker::ListBody, ResponseFuture},
     routing::Route,
 };
 use twilight_model::user::Connection;
@@ -11,22 +10,20 @@ use twilight_model::user::Connection;
 ///
 /// Requires the `connections` `OAuth2` scope.
 pub struct GetCurrentUserConnections<'a> {
-    fut: Option<PendingResponse<'a, ListBody<Connection>>>,
     http: &'a Client,
 }
 
 impl<'a> GetCurrentUserConnections<'a> {
-    pub(crate) fn new(http: &'a Client) -> Self {
-        Self { fut: None, http }
+    pub(crate) const fn new(http: &'a Client) -> Self {
+        Self { http }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<ListBody<Connection>> {
         let request = Request::from_route(Route::GetUserConnections);
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(GetCurrentUserConnections<'_>, ListBody<Connection>);

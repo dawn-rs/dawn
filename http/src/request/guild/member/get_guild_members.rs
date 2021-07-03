@@ -1,16 +1,12 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, PendingResponse, Request},
-    response::{marker::MemberListBody, Response},
+    request::{validate, Request},
+    response::{marker::MemberListBody, ResponseFuture},
     routing::Route,
 };
 use std::{
     error::Error,
     fmt::{Display, Formatter, Result as FmtResult},
-    future::Future,
-    pin::Pin,
-    task::{Context, Poll},
 };
 use twilight_model::id::{GuildId, UserId};
 
@@ -93,12 +89,11 @@ struct GetGuildMembersFields {
 ///
 /// let guild_id = GuildId(100);
 /// let user_id = UserId(3000);
-/// let members = client.guild_members(guild_id).after(user_id).await?;
+/// let members = client.guild_members(guild_id).after(user_id).exec().await?;
 /// # Ok(()) }
 /// ```
 pub struct GetGuildMembers<'a> {
     fields: GetGuildMembersFields,
-    fut: Option<PendingResponse<'a, MemberListBody>>,
     guild_id: GuildId,
     http: &'a Client,
 }
@@ -107,7 +102,6 @@ impl<'a> GetGuildMembers<'a> {
     pub(crate) fn new(http: &'a Client, guild_id: GuildId) -> Self {
         Self {
             fields: GetGuildMembersFields::default(),
-            fut: None,
             guild_id,
             http,
         }
@@ -147,7 +141,10 @@ impl<'a> GetGuildMembers<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<MemberListBody> {
         let request = Request::from_route(Route::GetGuildMembers {
             after: self.fields.after.map(|x| x.0),
             guild_id: self.guild_id.0,
@@ -155,28 +152,9 @@ impl<'a> GetGuildMembers<'a> {
             presences: self.fields.presences,
         });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
+        let mut future = self.http.request(request);
+        future.set_guild_id(self.guild_id);
 
-        Ok(())
-    }
-}
-
-impl Future for GetGuildMembers<'_> {
-    type Output = Result<Response<MemberListBody>, HttpError>;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        loop {
-            if let Some(fut) = self.as_mut().fut.as_mut() {
-                return fut.as_mut().poll(cx).map_ok(|mut res| {
-                    res.set_guild_id(self.guild_id);
-
-                    res
-                });
-            }
-
-            if let Err(why) = self.as_mut().start() {
-                return Poll::Ready(Err(why));
-            }
-        }
+        future
     }
 }

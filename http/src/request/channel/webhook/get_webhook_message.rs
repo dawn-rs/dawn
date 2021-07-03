@@ -1,9 +1,4 @@
-use crate::{
-    client::Client,
-    error::Error,
-    request::{PendingResponse, Request},
-    routing::Route,
-};
+use crate::{client::Client, request::Request, response::ResponseFuture, routing::Route};
 use twilight_model::{
     channel::Message,
     id::{MessageId, WebhookId},
@@ -14,7 +9,6 @@ use twilight_model::{
 /// [`WebhookId`]: twilight_model::id::WebhookId
 /// [`MessageId`]: twilight_model::id::MessageId
 pub struct GetWebhookMessage<'a> {
-    fut: Option<PendingResponse<'a, Message>>,
     http: &'a Client,
     message_id: MessageId,
     token: String,
@@ -29,7 +23,6 @@ impl<'a> GetWebhookMessage<'a> {
         message_id: MessageId,
     ) -> Self {
         Self {
-            fut: None,
             http,
             message_id,
             token: token.into(),
@@ -37,19 +30,18 @@ impl<'a> GetWebhookMessage<'a> {
         }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Message> {
         let request = Request::builder(Route::GetWebhookMessage {
             message_id: self.message_id.0,
-            token: self.token.clone(),
+            token: self.token,
             webhook_id: self.webhook_id.0,
         })
         .use_authorization_token(false)
         .build();
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(GetWebhookMessage<'_>, Message);

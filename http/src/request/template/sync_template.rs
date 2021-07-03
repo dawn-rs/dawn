@@ -1,14 +1,8 @@
-use crate::{
-    client::Client,
-    error::Error,
-    request::{PendingResponse, Request},
-    routing::Route,
-};
+use crate::{client::Client, request::Request, response::ResponseFuture, routing::Route};
 use twilight_model::{id::GuildId, template::Template};
 
 /// Sync a template to the current state of the guild, by ID and code.
 pub struct SyncTemplate<'a> {
-    fut: Option<PendingResponse<'a, Template>>,
     guild_id: GuildId,
     http: &'a Client,
     template_code: String,
@@ -23,25 +17,23 @@ impl<'a> SyncTemplate<'a> {
         Self::_new(http, guild_id, template_code.into())
     }
 
-    fn _new(http: &'a Client, guild_id: GuildId, template_code: String) -> Self {
+    const fn _new(http: &'a Client, guild_id: GuildId, template_code: String) -> Self {
         Self {
-            fut: None,
             guild_id,
             http,
             template_code,
         }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Template> {
         let request = Request::from_route(Route::SyncTemplate {
             guild_id: self.guild_id.0,
-            template_code: self.template_code.clone(),
+            template_code: self.template_code,
         });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(SyncTemplate<'_>, Template);

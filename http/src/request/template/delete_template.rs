@@ -1,15 +1,13 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{PendingResponse, Request},
-    response::marker::EmptyBody,
+    request::Request,
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use twilight_model::id::GuildId;
 
 /// Delete a template by ID and code.
 pub struct DeleteTemplate<'a> {
-    fut: Option<PendingResponse<'a, EmptyBody>>,
     guild_id: GuildId,
     http: &'a Client,
     template_code: String,
@@ -24,25 +22,23 @@ impl<'a> DeleteTemplate<'a> {
         Self::_new(http, guild_id, template_code.into())
     }
 
-    fn _new(http: &'a Client, guild_id: GuildId, template_code: String) -> Self {
+    const fn _new(http: &'a Client, guild_id: GuildId, template_code: String) -> Self {
         Self {
-            fut: None,
             guild_id,
             http,
             template_code,
         }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
         let request = Request::from_route(Route::DeleteTemplate {
             guild_id: self.guild_id.0,
-            template_code: self.template_code.clone(),
+            template_code: self.template_code,
         });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(DeleteTemplate<'_>, EmptyBody);

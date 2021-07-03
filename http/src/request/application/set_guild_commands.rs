@@ -1,8 +1,8 @@
 use crate::{
     client::Client,
     error::Error,
-    request::{PendingResponse, Request},
-    response::marker::EmptyBody,
+    request::Request,
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use twilight_model::{
@@ -18,7 +18,6 @@ pub struct SetGuildCommands<'a> {
     commands: Vec<Command>,
     application_id: ApplicationId,
     guild_id: GuildId,
-    fut: Option<PendingResponse<'a, EmptyBody>>,
     http: &'a Client,
 }
 
@@ -33,23 +32,26 @@ impl<'a> SetGuildCommands<'a> {
             commands,
             application_id,
             guild_id,
-            fut: None,
             http,
         }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
-        let request = Request::builder(Route::SetGuildCommands {
+    fn request(&self) -> Result<Request, Error> {
+        Ok(Request::builder(Route::SetGuildCommands {
             application_id: self.application_id.0,
             guild_id: self.guild_id.0,
         })
-        .json(&self.commands)?;
+        .json(&self.commands)?
+        .build())
+    }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
+        match self.request() {
+            Ok(request) => self.http.request(request),
+            Err(source) => ResponseFuture::error(source),
+        }
     }
 }
-
-poll_req!(SetGuildCommands<'_>, EmptyBody);

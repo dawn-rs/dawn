@@ -1,8 +1,7 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{self, AuditLogReason, AuditLogReasonError, PendingResponse, Request},
-    response::marker::EmptyBody,
+    request::{self, AuditLogReason, AuditLogReasonError, Request},
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use twilight_model::id::{GuildId, RoleId, UserId};
@@ -25,11 +24,13 @@ use twilight_model::id::{GuildId, RoleId, UserId};
 /// let role_id = RoleId(2);
 /// let user_id = UserId(3);
 ///
-/// client.add_guild_member_role(guild_id, user_id, role_id).reason("test")?.await?;
+/// client.add_guild_member_role(guild_id, user_id, role_id)
+///     .reason("test")?
+///     .exec()
+///     .await?;
 /// # Ok(()) }
 /// ```
 pub struct AddRoleToMember<'a> {
-    fut: Option<PendingResponse<'a, EmptyBody>>,
     guild_id: GuildId,
     http: &'a Client,
     role_id: RoleId,
@@ -45,7 +46,6 @@ impl<'a> AddRoleToMember<'a> {
         role_id: impl Into<RoleId>,
     ) -> Self {
         Self {
-            fut: None,
             guild_id: guild_id.into(),
             http,
             role_id: role_id.into(),
@@ -54,7 +54,10 @@ impl<'a> AddRoleToMember<'a> {
         }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
         let mut request = Request::builder(Route::AddMemberRole {
             guild_id: self.guild_id.0,
             role_id: self.role_id.0,
@@ -62,13 +65,15 @@ impl<'a> AddRoleToMember<'a> {
         });
 
         if let Some(reason) = self.reason.as_ref() {
-            request = request.headers(request::audit_header(reason)?);
+            let header = match request::audit_header(reason) {
+                Ok(header) => header,
+                Err(source) => return ResponseFuture::error(source),
+            };
+
+            request = request.headers(header);
         }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+        self.http.request(request.build())
     }
 }
 
@@ -80,5 +85,3 @@ impl<'a> AuditLogReason for AddRoleToMember<'a> {
         Ok(self)
     }
 }
-
-poll_req!(AddRoleToMember<'_>, EmptyBody);

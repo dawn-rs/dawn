@@ -1,8 +1,7 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{self, AuditLogReason, AuditLogReasonError, PendingResponse, Request},
-    response::marker::EmptyBody,
+    request::{self, AuditLogReason, AuditLogReasonError, Request},
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use twilight_model::id::{GuildId, UserId};
@@ -24,11 +23,10 @@ use twilight_model::id::{GuildId, UserId};
 /// let guild_id = GuildId(100);
 /// let user_id = UserId(200);
 ///
-/// client.delete_ban(guild_id, user_id).await?;
+/// client.delete_ban(guild_id, user_id).exec().await?;
 /// # Ok(()) }
 /// ```
 pub struct DeleteBan<'a> {
-    fut: Option<PendingResponse<'a, EmptyBody>>,
     guild_id: GuildId,
     http: &'a Client,
     user_id: UserId,
@@ -36,9 +34,8 @@ pub struct DeleteBan<'a> {
 }
 
 impl<'a> DeleteBan<'a> {
-    pub(crate) fn new(http: &'a Client, guild_id: GuildId, user_id: UserId) -> Self {
+    pub(crate) const fn new(http: &'a Client, guild_id: GuildId, user_id: UserId) -> Self {
         Self {
-            fut: None,
             guild_id,
             http,
             user_id,
@@ -46,20 +43,25 @@ impl<'a> DeleteBan<'a> {
         }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
         let mut request = Request::builder(Route::DeleteBan {
             guild_id: self.guild_id.0,
             user_id: self.user_id.0,
         });
 
         if let Some(reason) = self.reason.as_ref() {
-            request = request.headers(request::audit_header(reason)?);
+            let header = match request::audit_header(reason) {
+                Ok(header) => header,
+                Err(source) => return ResponseFuture::error(source),
+            };
+
+            request = request.headers(header);
         }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+        self.http.request(request.build())
     }
 }
 
@@ -71,5 +73,3 @@ impl<'a> AuditLogReason for DeleteBan<'a> {
         Ok(self)
     }
 }
-
-poll_req!(DeleteBan<'_>, EmptyBody);

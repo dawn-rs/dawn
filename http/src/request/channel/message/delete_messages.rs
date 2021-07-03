@@ -1,8 +1,7 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{self, AuditLogReason, AuditLogReasonError, PendingResponse, Request},
-    response::marker::EmptyBody,
+    request::{self, AuditLogReason, AuditLogReasonError, Request},
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use serde::Serialize;
@@ -23,7 +22,6 @@ struct DeleteMessagesFields {
 pub struct DeleteMessages<'a> {
     channel_id: ChannelId,
     fields: DeleteMessagesFields,
-    fut: Option<PendingResponse<'a, EmptyBody>>,
     http: &'a Client,
     reason: Option<String>,
 }
@@ -39,26 +37,34 @@ impl<'a> DeleteMessages<'a> {
             fields: DeleteMessagesFields {
                 messages: message_ids.into(),
             },
-            fut: None,
             http,
             reason: None,
         }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
         let mut request = Request::builder(Route::DeleteMessages {
             channel_id: self.channel_id.0,
-        })
-        .json(&self.fields)?;
+        });
+
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
         if let Some(reason) = &self.reason {
-            request = request.headers(request::audit_header(reason)?);
+            let header = match request::audit_header(reason) {
+                Ok(header) => header,
+                Err(source) => return ResponseFuture::error(source),
+            };
+
+            request = request.headers(header);
         }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+        self.http.request(request.build())
     }
 }
 
@@ -70,5 +76,3 @@ impl<'a> AuditLogReason for DeleteMessages<'a> {
         Ok(self)
     }
 }
-
-poll_req!(DeleteMessages<'_>, EmptyBody);

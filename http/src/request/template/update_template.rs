@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, PendingResponse, Request},
+    request::{validate, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
@@ -83,7 +83,6 @@ struct UpdateTemplateFields {
 /// Update the template's metadata, by ID and code.
 pub struct UpdateTemplate<'a> {
     fields: UpdateTemplateFields,
-    fut: Option<PendingResponse<'a, Template>>,
     guild_id: GuildId,
     http: &'a Client,
     template_code: String,
@@ -98,13 +97,12 @@ impl<'a> UpdateTemplate<'a> {
         Self::_new(http, guild_id, template_code.into())
     }
 
-    fn _new(http: &'a Client, guild_id: GuildId, template_code: String) -> Self {
+    const fn _new(http: &'a Client, guild_id: GuildId, template_code: String) -> Self {
         Self {
             fields: UpdateTemplateFields {
                 name: None,
                 description: None,
             },
-            fut: None,
             guild_id,
             http,
             template_code,
@@ -159,18 +157,20 @@ impl<'a> UpdateTemplate<'a> {
         Ok(self)
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
-        let request = Request::builder(Route::UpdateTemplate {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Template> {
+        let mut request = Request::builder(Route::UpdateTemplate {
             guild_id: self.guild_id.0,
-            template_code: self.template_code.clone(),
-        })
-        .json(&self.fields)?
-        .build();
+            template_code: self.template_code,
+        });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(UpdateTemplate<'_>, Template);

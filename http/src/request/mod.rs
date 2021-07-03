@@ -1,26 +1,3 @@
-macro_rules! poll_req {
-    ($ty: ty, $out: ty) => {
-        impl std::future::Future for $ty {
-            type Output = Result<$crate::request::Response<$out>, $crate::error::Error>;
-
-            fn poll(
-                mut self: std::pin::Pin<&mut Self>,
-                cx: &mut std::task::Context<'_>,
-            ) -> ::std::task::Poll<Self::Output> {
-                loop {
-                    if let Some(fut) = self.as_mut().fut.as_mut() {
-                        return fut.as_mut().poll(cx);
-                    }
-
-                    if let Err(why) = self.as_mut().start() {
-                        return ::std::task::Poll::Ready(Err(why));
-                    }
-                }
-            }
-        }
-    };
-}
-
 pub mod application;
 pub mod channel;
 pub mod guild;
@@ -47,23 +24,14 @@ pub use self::{
     multipart::Form,
 };
 
-use crate::{
-    error::{Error, ErrorType},
-    response::Response,
-};
+use crate::error::{Error, ErrorType};
 use hyper::{
     header::{HeaderName, HeaderValue},
     Method as HyperMethod,
 };
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use serde::{Serialize, Serializer};
-use std::{future::Future, iter, pin::Pin};
-
-/// Response is in-flight and is currently pending.
-///
-/// Resolves to a [`Response`] when completed. Responses may or may not have
-/// deserializable bodies.
-type PendingResponse<'a, T> = Pin<Box<dyn Future<Output = Result<Response<T>, Error>> + Send + 'a>>;
+use std::iter;
 
 /// Request method.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

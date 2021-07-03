@@ -1,30 +1,27 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{PendingResponse, Request},
-    response::marker::ListBody,
+    request::Request,
+    response::{marker::ListBody, ResponseFuture},
     routing::Route,
 };
 use twilight_model::voice::VoiceRegion;
 
 /// Get a list of voice regions that can be used when creating a guild.
 pub struct GetVoiceRegions<'a> {
-    fut: Option<PendingResponse<'a, ListBody<VoiceRegion>>>,
     http: &'a Client,
 }
 
 impl<'a> GetVoiceRegions<'a> {
-    pub(crate) fn new(http: &'a Client) -> Self {
-        Self { fut: None, http }
+    pub(crate) const fn new(http: &'a Client) -> Self {
+        Self { http }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<ListBody<VoiceRegion>> {
         let request = Request::from_route(Route::GetVoiceRegions);
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(GetVoiceRegions<'_>, ListBody<VoiceRegion>);

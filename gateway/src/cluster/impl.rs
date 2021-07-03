@@ -375,6 +375,7 @@ impl Cluster {
         let gateway = http
             .gateway()
             .authed()
+            .exec()
             .await
             .map_err(|source| ClusterStartError {
                 kind: ClusterStartErrorType::RetrievingGatewayInfo,

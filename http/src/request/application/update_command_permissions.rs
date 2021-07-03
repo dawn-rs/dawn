@@ -3,9 +3,9 @@ use crate::{
     error::Error,
     request::{
         application::{InteractionError, InteractionErrorType},
-        validate, PendingResponse, Request,
+        validate, Request,
     },
-    response::marker::ListBody,
+    response::{marker::ListBody, ResponseFuture},
     routing::Route,
 };
 use serde::Serialize;
@@ -30,7 +30,6 @@ pub struct UpdateCommandPermissions<'a> {
     command_id: CommandId,
     guild_id: GuildId,
     fields: UpdateCommandPermissionsFields,
-    fut: Option<PendingResponse<'a, ListBody<CommandPermissions>>>,
     http: &'a Client,
 }
 
@@ -53,24 +52,27 @@ impl<'a> UpdateCommandPermissions<'a> {
             command_id,
             guild_id,
             fields: UpdateCommandPermissionsFields { permissions },
-            fut: None,
             http,
         })
     }
 
-    fn start(&mut self) -> Result<(), Error> {
-        let request = Request::builder(Route::UpdateCommandPermissions {
+    fn request(&self) -> Result<Request, Error> {
+        Ok(Request::builder(Route::UpdateCommandPermissions {
             application_id: self.application_id.0,
             command_id: self.command_id.0,
             guild_id: self.guild_id.0,
         })
-        .json(&self.fields)?;
+        .json(&self.fields)?
+        .build())
+    }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<ListBody<CommandPermissions>> {
+        match self.request() {
+            Ok(request) => self.http.request(request),
+            Err(source) => ResponseFuture::error(source),
+        }
     }
 }
-
-poll_req!(UpdateCommandPermissions<'_>, ListBody<CommandPermissions>);

@@ -1,8 +1,8 @@
 use crate::{
     client::Client,
     error::Error,
-    request::{self, AuditLogReason, AuditLogReasonError, PendingResponse, Request},
-    response::marker::EmptyBody,
+    request::{self, AuditLogReason, AuditLogReasonError, Request},
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use serde::Serialize;
@@ -24,14 +24,13 @@ struct UpdateChannelPermissionConfiguredFields {
 pub struct UpdateChannelPermissionConfigured<'a> {
     channel_id: ChannelId,
     fields: UpdateChannelPermissionConfiguredFields,
-    fut: Option<PendingResponse<'a, EmptyBody>>,
     http: &'a Client,
     target_id: u64,
     reason: Option<String>,
 }
 
 impl<'a> UpdateChannelPermissionConfigured<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         http: &'a Client,
         channel_id: ChannelId,
         allow: Permissions,
@@ -54,7 +53,6 @@ impl<'a> UpdateChannelPermissionConfigured<'a> {
                 deny,
                 kind: name,
             },
-            fut: None,
             http,
             target_id,
             reason: None,
@@ -75,12 +73,16 @@ impl<'a> UpdateChannelPermissionConfigured<'a> {
         Ok(request.build())
     }
 
-    fn start(&mut self) -> Result<(), Error> {
-        let request = self.request()?;
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
+        let request = match self.request() {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
 
@@ -92,8 +94,6 @@ impl<'a> AuditLogReason for UpdateChannelPermissionConfigured<'a> {
         Ok(self)
     }
 }
-
-poll_req!(UpdateChannelPermissionConfigured<'_>, EmptyBody);
 
 #[cfg(test)]
 mod tests {

@@ -1,8 +1,7 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{self, AuditLogReason, AuditLogReasonError, PendingResponse, Request},
-    response::marker::EmptyBody,
+    request::{self, AuditLogReason, AuditLogReasonError, Request},
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use twilight_model::id::ChannelId;
@@ -12,37 +11,40 @@ use twilight_model::id::ChannelId;
 /// The `target_id` is a `u64`, but it should point to a `RoleId` or a `UserId`.
 pub struct DeleteChannelPermissionConfigured<'a> {
     channel_id: ChannelId,
-    fut: Option<PendingResponse<'a, EmptyBody>>,
     http: &'a Client,
     reason: Option<String>,
     target_id: u64,
 }
 
 impl<'a> DeleteChannelPermissionConfigured<'a> {
-    pub(crate) fn new(http: &'a Client, channel_id: ChannelId, target_id: u64) -> Self {
+    pub(crate) const fn new(http: &'a Client, channel_id: ChannelId, target_id: u64) -> Self {
         Self {
             channel_id,
-            fut: None,
             http,
             reason: None,
             target_id,
         }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
         let mut request = Request::builder(Route::DeletePermissionOverwrite {
             channel_id: self.channel_id.0,
             target_id: self.target_id,
         });
 
         if let Some(reason) = &self.reason {
-            request = request.headers(request::audit_header(reason)?);
+            let header = match request::audit_header(reason) {
+                Ok(header) => header,
+                Err(source) => return ResponseFuture::error(source),
+            };
+
+            request = request.headers(header);
         }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+        self.http.request(request.build())
     }
 }
 
@@ -54,5 +56,3 @@ impl<'a> AuditLogReason for DeleteChannelPermissionConfigured<'a> {
         Ok(self)
     }
 }
-
-poll_req!(DeleteChannelPermissionConfigured<'_>, EmptyBody);

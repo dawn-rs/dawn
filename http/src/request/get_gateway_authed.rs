@@ -1,9 +1,4 @@
-use crate::{
-    client::Client,
-    error::Error,
-    request::{PendingResponse, Request},
-    routing::Route,
-};
+use crate::{client::Client, request::Request, response::ResponseFuture, routing::Route};
 use twilight_model::gateway::connection_info::BotConnectionInfo;
 
 /// Get information about the gateway, authenticated as a bot user.
@@ -11,22 +6,20 @@ use twilight_model::gateway::connection_info::BotConnectionInfo;
 /// Returns additional information: the recommended number of shards to use, and information on
 /// the current session start limit.
 pub struct GetGatewayAuthed<'a> {
-    fut: Option<PendingResponse<'a, BotConnectionInfo>>,
     http: &'a Client,
 }
 
 impl<'a> GetGatewayAuthed<'a> {
-    pub(crate) fn new(http: &'a Client) -> Self {
-        Self { fut: None, http }
+    pub(crate) const fn new(http: &'a Client) -> Self {
+        Self { http }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<BotConnectionInfo> {
         let request = Request::from_route(Route::GetGatewayBot);
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(GetGatewayAuthed<'_>, BotConnectionInfo);

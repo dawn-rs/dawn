@@ -1,8 +1,7 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{PendingResponse, Request},
-    response::marker::EmptyBody,
+    request::Request,
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use serde::Serialize;
@@ -37,7 +36,6 @@ impl From<(ChannelId, u64)> for Position {
 /// This function accepts an `Iterator` of `(ChannelId, u64)`. It also accepts
 /// an `Iterator` of `Position`, which has extra fields.
 pub struct UpdateGuildChannelPositions<'a> {
-    fut: Option<PendingResponse<'a, EmptyBody>>,
     guild_id: GuildId,
     http: &'a Client,
     positions: Vec<Position>,
@@ -52,24 +50,25 @@ impl<'a> UpdateGuildChannelPositions<'a> {
         let positions = channel_positions.map(Into::into).collect();
 
         Self {
-            fut: None,
             guild_id,
             http,
             positions,
         }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
-        let request = Request::builder(Route::UpdateGuildChannels {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
+        let mut request = Request::builder(Route::UpdateGuildChannels {
             guild_id: self.guild_id.0,
-        })
-        .json(&self.positions)?
-        .build();
+        });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
+        request = match request.json(&self.positions) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(UpdateGuildChannelPositions<'_>, EmptyBody);

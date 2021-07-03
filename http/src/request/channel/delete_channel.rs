@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{self, AuditLogReason, AuditLogReasonError, PendingResponse, Request},
+    request::{self, AuditLogReason, AuditLogReasonError, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use twilight_model::{channel::Channel, id::ChannelId};
@@ -9,34 +9,37 @@ use twilight_model::{channel::Channel, id::ChannelId};
 /// Delete a channel by ID.
 pub struct DeleteChannel<'a> {
     channel_id: ChannelId,
-    fut: Option<PendingResponse<'a, Channel>>,
     http: &'a Client,
     reason: Option<String>,
 }
 
 impl<'a> DeleteChannel<'a> {
-    pub(crate) fn new(http: &'a Client, channel_id: ChannelId) -> Self {
+    pub(crate) const fn new(http: &'a Client, channel_id: ChannelId) -> Self {
         Self {
             channel_id,
-            fut: None,
             http,
             reason: None,
         }
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Channel> {
         let mut request = Request::builder(Route::DeleteChannel {
             channel_id: self.channel_id.0,
         });
 
         if let Some(reason) = &self.reason {
-            request = request.headers(request::audit_header(reason)?);
+            let header = match request::audit_header(reason) {
+                Ok(header) => header,
+                Err(source) => return ResponseFuture::error(source),
+            };
+
+            request = request.headers(header);
         }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+        self.http.request(request.build())
     }
 }
 
@@ -48,5 +51,3 @@ impl<'a> AuditLogReason for DeleteChannel<'a> {
         Ok(self)
     }
 }
-
-poll_req!(DeleteChannel<'_>, Channel);

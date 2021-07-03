@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{self, AuditLogReason, AuditLogReasonError, PendingResponse, Request},
+    request::{self, AuditLogReason, AuditLogReasonError, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
@@ -40,12 +40,12 @@ struct CreateRoleFields {
 /// client.create_role(guild_id)
 ///     .color(0xd90083)
 ///     .name("Bright Pink")
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
 pub struct CreateRole<'a> {
     fields: CreateRoleFields,
-    fut: Option<PendingResponse<'a, Role>>,
     guild_id: GuildId,
     http: &'a Client,
     reason: Option<String>,
@@ -55,7 +55,6 @@ impl<'a> CreateRole<'a> {
     pub(crate) fn new(http: &'a Client, guild_id: GuildId) -> Self {
         Self {
             fields: CreateRoleFields::default(),
-            fut: None,
             guild_id,
             http,
             reason: None,
@@ -99,20 +98,29 @@ impl<'a> CreateRole<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Role> {
         let mut request = Request::builder(Route::CreateRole {
             guild_id: self.guild_id.0,
-        })
-        .json(&self.fields)?;
+        });
+
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
         if let Some(reason) = &self.reason {
-            request = request.headers(request::audit_header(reason)?);
+            let header = match request::audit_header(reason) {
+                Ok(header) => header,
+                Err(source) => return ResponseFuture::error(source),
+            };
+
+            request = request.headers(header);
         }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+        self.http.request(request.build())
     }
 }
 
@@ -124,5 +132,3 @@ impl<'a> AuditLogReason for CreateRole<'a> {
         Ok(self)
     }
 }
-
-poll_req!(CreateRole<'_>, Role);

@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{self, validate, AuditLogReason, AuditLogReasonError, PendingResponse, Request},
+    request::{self, validate, AuditLogReason, AuditLogReasonError, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
@@ -104,6 +104,7 @@ struct CreateInviteFields {
 /// let invite = client
 ///     .create_invite(channel_id)
 ///     .max_uses(3)?
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
@@ -112,7 +113,6 @@ struct CreateInviteFields {
 pub struct CreateInvite<'a> {
     channel_id: ChannelId,
     fields: CreateInviteFields,
-    fut: Option<PendingResponse<'a, Invite>>,
     http: &'a Client,
     reason: Option<String>,
 }
@@ -122,7 +122,6 @@ impl<'a> CreateInvite<'a> {
         Self {
             channel_id,
             fields: CreateInviteFields::default(),
-            fut: None,
             http,
             reason: None,
         }
@@ -148,6 +147,7 @@ impl<'a> CreateInvite<'a> {
     /// let client = Client::new(env::var("DISCORD_TOKEN")?);
     /// let invite = client.create_invite(ChannelId(1))
     ///     .max_age(60 * 60)?
+    ///     .exec()
     ///     .await?
     ///     .model()
     ///     .await?;
@@ -185,6 +185,7 @@ impl<'a> CreateInvite<'a> {
     /// let client = Client::new(env::var("DISCORD_TOKEN")?);
     /// let invite = client.create_invite(ChannelId(1))
     ///     .max_uses(5)?
+    ///     .exec()
     ///     .await?
     ///     .model()
     ///     .await?;
@@ -254,20 +255,29 @@ impl<'a> CreateInvite<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Invite> {
         let mut request = Request::builder(Route::CreateInvite {
             channel_id: self.channel_id.0,
-        })
-        .json(&self.fields)?;
+        });
+
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
         if let Some(reason) = &self.reason {
-            request = request.headers(request::audit_header(reason)?);
+            let header = match request::audit_header(reason) {
+                Ok(header) => header,
+                Err(source) => return ResponseFuture::error(source),
+            };
+
+            request = request.headers(header);
         }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+        self.http.request(request.build())
     }
 }
 
@@ -279,8 +289,6 @@ impl<'a> AuditLogReason for CreateInvite<'a> {
         Ok(self)
     }
 }
-
-poll_req!(CreateInvite<'_>, Invite);
 
 #[cfg(test)]
 mod tests {

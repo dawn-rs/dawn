@@ -3,9 +3,9 @@ use crate::{
     error::Error as HttpError,
     request::{
         application::{InteractionError, InteractionErrorType},
-        validate, PendingResponse, Request,
+        validate, Request, RequestBuilder,
     },
-    response::marker::EmptyBody,
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use twilight_model::{
@@ -24,7 +24,6 @@ use twilight_model::{
 pub struct CreateGlobalCommand<'a> {
     command: Command,
     application_id: ApplicationId,
-    fut: Option<PendingResponse<'a, EmptyBody>>,
     http: &'a Client,
     optional_option_added: bool,
 }
@@ -61,7 +60,6 @@ impl<'a> CreateGlobalCommand<'a> {
                 options: vec![],
             },
             application_id,
-            fut: None,
             http,
             optional_option_added: false,
         })
@@ -98,17 +96,21 @@ impl<'a> CreateGlobalCommand<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
-        let request = Request::builder(Route::CreateGlobalCommand {
+    fn request(&self) -> Result<Request, HttpError> {
+        Request::builder(Route::CreateGlobalCommand {
             application_id: self.application_id.0,
         })
-        .json(&self.command)?;
+        .json(&self.command)
+        .map(RequestBuilder::build)
+    }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
+        match self.request() {
+            Ok(request) => self.http.request(request),
+            Err(source) => ResponseFuture::error(source),
+        }
     }
 }
-
-poll_req!(CreateGlobalCommand<'_>, EmptyBody);

@@ -1,8 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, PendingResponse, Request},
-    response::marker::ListBody,
+    request::{validate, Request},
+    response::{marker::ListBody, ResponseFuture},
     routing::Route,
 };
 use std::{
@@ -86,12 +85,11 @@ pub struct GetChannelMessagesConfigured<'a> {
     before: Option<MessageId>,
     channel_id: ChannelId,
     fields: GetChannelMessagesConfiguredFields,
-    fut: Option<PendingResponse<'a, ListBody<Message>>>,
     http: &'a Client,
 }
 
 impl<'a> GetChannelMessagesConfigured<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         http: &'a Client,
         channel_id: ChannelId,
         after: Option<MessageId>,
@@ -105,7 +103,6 @@ impl<'a> GetChannelMessagesConfigured<'a> {
             before,
             channel_id,
             fields: GetChannelMessagesConfiguredFields { limit },
-            fut: None,
             http,
         }
     }
@@ -130,7 +127,10 @@ impl<'a> GetChannelMessagesConfigured<'a> {
         Ok(self)
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<ListBody<Message>> {
         let request = Request::from_route(Route::GetMessages {
             after: self.after.map(|x| x.0),
             around: self.around.map(|x| x.0),
@@ -139,10 +139,6 @@ impl<'a> GetChannelMessagesConfigured<'a> {
             limit: self.fields.limit,
         });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(GetChannelMessagesConfigured<'_>, ListBody<Message>);

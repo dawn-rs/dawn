@@ -1,9 +1,4 @@
-use crate::{
-    client::Client,
-    error::Error,
-    request::{PendingResponse, Request},
-    routing::Route,
-};
+use crate::{client::Client, request::Request, response::ResponseFuture, routing::Route};
 use twilight_model::{channel::Webhook, id::WebhookId};
 
 #[derive(Default)]
@@ -14,7 +9,6 @@ struct GetWebhookFields {
 /// Get a webhook by ID.
 pub struct GetWebhook<'a> {
     fields: GetWebhookFields,
-    fut: Option<PendingResponse<'a, Webhook>>,
     http: &'a Client,
     id: WebhookId,
 }
@@ -23,7 +17,6 @@ impl<'a> GetWebhook<'a> {
     pub(crate) fn new(http: &'a Client, id: WebhookId) -> Self {
         Self {
             fields: GetWebhookFields::default(),
-            fut: None,
             http,
             id,
         }
@@ -37,23 +30,23 @@ impl<'a> GetWebhook<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Webhook> {
+        let use_webhook_token = self.fields.token.is_some();
+
         let mut request = Request::builder(Route::GetWebhook {
-            token: self.fields.token.clone(),
+            token: self.fields.token,
             webhook_id: self.id.0,
         });
 
         // If a webhook token has been configured, then we don't need to use
         // the client's authorization token.
-        if self.fields.token.is_some() {
+        if use_webhook_token {
             request = request.use_authorization_token(false);
         }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+        self.http.request(request.build())
     }
 }
-
-poll_req!(GetWebhook<'_>, Webhook);

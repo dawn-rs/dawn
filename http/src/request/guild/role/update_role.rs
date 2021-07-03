@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{self, AuditLogReason, AuditLogReasonError, NullableField, PendingResponse, Request},
+    request::{self, AuditLogReason, AuditLogReasonError, NullableField, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
@@ -27,7 +27,6 @@ struct UpdateRoleFields {
 /// Update a role by guild id and its id.
 pub struct UpdateRole<'a> {
     fields: UpdateRoleFields,
-    fut: Option<PendingResponse<'a, Role>>,
     guild_id: GuildId,
     http: &'a Client,
     role_id: RoleId,
@@ -38,7 +37,6 @@ impl<'a> UpdateRole<'a> {
     pub(crate) fn new(http: &'a Client, guild_id: GuildId, role_id: RoleId) -> Self {
         Self {
             fields: UpdateRoleFields::default(),
-            fut: None,
             guild_id,
             http,
             role_id,
@@ -85,21 +83,30 @@ impl<'a> UpdateRole<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Role> {
         let mut request = Request::builder(Route::UpdateRole {
             guild_id: self.guild_id.0,
             role_id: self.role_id.0,
-        })
-        .json(&self.fields)?;
+        });
+
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
         if let Some(reason) = &self.reason {
-            request = request.headers(request::audit_header(reason)?);
+            let header = match request::audit_header(reason) {
+                Ok(header) => header,
+                Err(source) => return ResponseFuture::error(source),
+            };
+
+            request = request.headers(header);
         }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+        self.http.request(request.build())
     }
 }
 
@@ -111,5 +118,3 @@ impl<'a> AuditLogReason for UpdateRole<'a> {
         Ok(self)
     }
 }
-
-poll_req!(UpdateRole<'_>, Role);

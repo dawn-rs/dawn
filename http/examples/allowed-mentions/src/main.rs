@@ -32,6 +32,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 .user_ids(vec![user_id])
                 .build(),
         )
+        .exec()
         .await?;
 
     Ok(())

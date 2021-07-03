@@ -1,8 +1,8 @@
 use crate::{
     client::Client,
     error::Error,
-    request::{PendingResponse, Request},
-    response::marker::EmptyBody,
+    request::Request,
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use twilight_model::{
@@ -31,7 +31,6 @@ pub struct UpdateGuildCommand<'a> {
     application_id: ApplicationId,
     command_id: CommandId,
     guild_id: GuildId,
-    fut: Option<PendingResponse<'a, EmptyBody>>,
     http: &'a Client,
 }
 
@@ -46,7 +45,6 @@ impl<'a> UpdateGuildCommand<'a> {
             application_id,
             command_id,
             fields: UpdateGuildCommandFields::default(),
-            fut: None,
             guild_id,
             http,
         }
@@ -77,19 +75,23 @@ impl<'a> UpdateGuildCommand<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), Error> {
-        let request = Request::builder(Route::UpdateGuildCommand {
+    fn request(&self) -> Result<Request, Error> {
+        Ok(Request::builder(Route::UpdateGuildCommand {
             application_id: self.application_id.0,
             command_id: self.command_id.0,
             guild_id: self.guild_id.0,
         })
-        .json(&self.fields)?;
+        .json(&self.fields)?
+        .build())
+    }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
+        match self.request() {
+            Ok(request) => self.http.request(request),
+            Err(source) => ResponseFuture::error(source),
+        }
     }
 }
-
-poll_req!(UpdateGuildCommand<'_>, EmptyBody);

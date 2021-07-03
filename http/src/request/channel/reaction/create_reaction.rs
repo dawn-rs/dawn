@@ -1,9 +1,8 @@
 use super::RequestReactionType;
 use crate::{
     client::Client,
-    error::Error,
-    request::{PendingResponse, Request},
-    response::marker::EmptyBody,
+    request::Request,
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use twilight_model::id::{ChannelId, MessageId};
@@ -29,19 +28,19 @@ use twilight_model::id::{ChannelId, MessageId};
 ///
 /// let reaction = client
 ///     .create_reaction(channel_id, message_id, emoji)
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
 pub struct CreateReaction<'a> {
     channel_id: ChannelId,
     emoji: RequestReactionType,
-    fut: Option<PendingResponse<'a, EmptyBody>>,
     http: &'a Client,
     message_id: MessageId,
 }
 
 impl<'a> CreateReaction<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         http: &'a Client,
         channel_id: ChannelId,
         message_id: MessageId,
@@ -50,30 +49,31 @@ impl<'a> CreateReaction<'a> {
         Self {
             channel_id,
             emoji,
-            fut: None,
             http,
             message_id,
         }
     }
 
-    fn request(&self) -> Request {
-        Request::from_route(Route::CreateReaction {
-            channel_id: self.channel_id.0,
-            emoji: self.emoji.display().to_string(),
-            message_id: self.message_id.0,
-        })
+    fn request(self) -> (Request, &'a Client) {
+        (
+            Request::from_route(Route::CreateReaction {
+                channel_id: self.channel_id.0,
+                emoji: self.emoji.display().to_string(),
+                message_id: self.message_id.0,
+            }),
+            self.http,
+        )
     }
 
-    fn start(&mut self) -> Result<(), Error> {
-        let request = self.request();
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
+        let (request, client) = self.request();
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        client.request(request)
     }
 }
-
-poll_req!(CreateReaction<'_>, EmptyBody);
 
 #[cfg(test)]
 mod tests {
@@ -95,7 +95,7 @@ mod tests {
         };
 
         let builder = CreateReaction::new(&client, ChannelId(123), MessageId(456), emoji);
-        let actual = builder.request();
+        let (actual, _) = builder.request();
 
         let expected = Request::from_route(Route::CreateReaction {
             channel_id: 123,

@@ -3,9 +3,9 @@ use crate::{
     error::Error as HttpError,
     request::{
         application::{InteractionError, InteractionErrorType},
-        validate, PendingResponse, Request,
+        validate, Request, RequestBuilder,
     },
-    response::marker::EmptyBody,
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use twilight_model::{
@@ -24,7 +24,6 @@ use twilight_model::{
 pub struct CreateGuildCommand<'a> {
     application_id: ApplicationId,
     command: Command,
-    fut: Option<PendingResponse<'a, EmptyBody>>,
     guild_id: GuildId,
     http: &'a Client,
     optional_option_added: bool,
@@ -65,7 +64,6 @@ impl<'a> CreateGuildCommand<'a> {
             },
             application_id,
             guild_id,
-            fut: None,
             http,
             optional_option_added: false,
         })
@@ -103,18 +101,22 @@ impl<'a> CreateGuildCommand<'a> {
         Ok(self)
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
-        let request = Request::builder(Route::CreateGuildCommand {
+    fn request(&self) -> Result<Request, HttpError> {
+        Request::builder(Route::CreateGuildCommand {
             application_id: self.application_id.0,
             guild_id: self.guild_id.0,
         })
-        .json(&self.command)?;
+        .json(&self.command)
+        .map(RequestBuilder::build)
+    }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
+        match self.request() {
+            Ok(request) => self.http.request(request),
+            Err(source) => ResponseFuture::error(source),
+        }
     }
 }
-
-poll_req!(CreateGuildCommand<'_>, EmptyBody);

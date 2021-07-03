@@ -1,8 +1,8 @@
 use crate::{
     client::Client,
     error::Error,
-    request::{PendingResponse, Request},
-    response::marker::EmptyBody,
+    request::Request,
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use twilight_model::{
@@ -30,7 +30,6 @@ pub struct UpdateGlobalCommand<'a> {
     fields: UpdateGlobalCommandFields,
     command_id: CommandId,
     application_id: ApplicationId,
-    fut: Option<PendingResponse<'a, EmptyBody>>,
     http: &'a Client,
 }
 
@@ -44,7 +43,6 @@ impl<'a> UpdateGlobalCommand<'a> {
             application_id,
             command_id,
             fields: UpdateGlobalCommandFields::default(),
-            fut: None,
             http,
         }
     }
@@ -74,18 +72,22 @@ impl<'a> UpdateGlobalCommand<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), Error> {
-        let request = Request::builder(Route::UpdateGlobalCommand {
+    fn request(&self) -> Result<Request, Error> {
+        Ok(Request::builder(Route::UpdateGlobalCommand {
             application_id: self.application_id.0,
             command_id: self.command_id.0,
         })
-        .json(&self.fields)?;
+        .json(&self.fields)?
+        .build())
+    }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
+        match self.request() {
+            Ok(request) => self.http.request(request),
+            Err(source) => ResponseFuture::error(source),
+        }
     }
 }
-
-poll_req!(UpdateGlobalCommand<'_>, EmptyBody);

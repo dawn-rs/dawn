@@ -1,7 +1,8 @@
 use crate::{
     client::Client,
     error::Error,
-    request::{Form, PendingResponse, Request},
+    request::{Form, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
@@ -51,6 +52,7 @@ pub(crate) struct CreateFollowupMessageFields {
 /// client
 ///     .create_followup_message("webhook token")?
 ///     .content("Pinkie...")
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
@@ -61,7 +63,6 @@ pub(crate) struct CreateFollowupMessageFields {
 pub struct CreateFollowupMessage<'a> {
     pub(crate) fields: CreateFollowupMessageFields,
     files: Vec<(String, Vec<u8>)>,
-    fut: Option<PendingResponse<'a, Message>>,
     http: &'a Client,
     token: String,
     application_id: ApplicationId,
@@ -76,7 +77,6 @@ impl<'a> CreateFollowupMessage<'a> {
         Self {
             fields: CreateFollowupMessageFields::default(),
             files: Vec::new(),
-            fut: None,
             http,
             token: token.into(),
             application_id,
@@ -168,6 +168,7 @@ impl<'a> CreateFollowupMessage<'a> {
     /// let message = client.create_followup_message("token here")?
     ///     .content("some content")
     ///     .embeds(vec![EmbedBuilder::new().title("title").build()?])
+    ///     .exec()
     ///     .await?
     ///     .model()
     ///     .await?;
@@ -191,6 +192,7 @@ impl<'a> CreateFollowupMessage<'a> {
     /// let message = client.create_followup_message("token here")?
     ///     .content("some content")
     ///     .payload_json(r#"{ "content": "other content", "embeds": [ { "title": "title" } ] }"#)
+    ///     .exec()
     ///     .await?
     ///     .model()
     ///     .await?;
@@ -221,7 +223,7 @@ impl<'a> CreateFollowupMessage<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    fn request(&mut self) -> Result<Request, Error> {
         let mut request = Request::builder(Route::ExecuteWebhook {
             token: self.token.clone(),
             wait: None,
@@ -247,11 +249,16 @@ impl<'a> CreateFollowupMessage<'a> {
             request = request.json(&self.fields)?;
         }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
+        Ok(request.build())
+    }
 
-        Ok(())
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(mut self) -> ResponseFuture<Message> {
+        match self.request() {
+            Ok(request) => self.http.request(request),
+            Err(source) => ResponseFuture::error(source),
+        }
     }
 }
-
-poll_req!(CreateFollowupMessage<'_>, Message);

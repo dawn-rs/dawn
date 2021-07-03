@@ -25,7 +25,7 @@ impl<'a> DeleteChannelPermission<'a> {
         self.configure(role_id.into().0)
     }
 
-    fn configure(self, target_id: u64) -> DeleteChannelPermissionConfigured<'a> {
+    const fn configure(self, target_id: u64) -> DeleteChannelPermissionConfigured<'a> {
         DeleteChannelPermissionConfigured::new(self.http, self.channel_id, target_id)
     }
 }

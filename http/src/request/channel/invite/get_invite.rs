@@ -1,9 +1,4 @@
-use crate::{
-    client::Client,
-    error::Error,
-    request::{PendingResponse, Request},
-    routing::Route,
-};
+use crate::{client::Client, request::Request, response::ResponseFuture, routing::Route};
 use twilight_model::invite::Invite;
 
 #[derive(Default)]
@@ -30,6 +25,7 @@ struct GetInviteFields {
 /// let invite = client
 ///     .invite("code")
 ///     .with_counts()
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
@@ -39,7 +35,6 @@ struct GetInviteFields {
 pub struct GetInvite<'a> {
     code: String,
     fields: GetInviteFields,
-    fut: Option<PendingResponse<'a, Invite>>,
     http: &'a Client,
 }
 
@@ -48,7 +43,6 @@ impl<'a> GetInvite<'a> {
         Self {
             code: code.into(),
             fields: GetInviteFields::default(),
-            fut: None,
             http,
         }
     }
@@ -67,17 +61,16 @@ impl<'a> GetInvite<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<Invite> {
         let request = Request::from_route(Route::GetInviteWithExpiration {
-            code: self.code.clone(),
+            code: self.code,
             with_counts: self.fields.with_counts,
             with_expiration: self.fields.with_expiration,
         });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(GetInvite<'_>, Invite);

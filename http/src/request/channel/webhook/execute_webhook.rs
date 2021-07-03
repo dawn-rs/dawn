@@ -2,8 +2,8 @@ use super::ExecuteWebhookAndWait;
 use crate::{
     client::Client,
     error::Error,
-    request::{Form, PendingResponse, Request},
-    response::marker::EmptyBody,
+    request::{Form, Request},
+    response::{marker::EmptyBody, ResponseFuture},
     routing::Route,
 };
 use serde::Serialize;
@@ -48,6 +48,7 @@ pub(crate) struct ExecuteWebhookFields {
 /// client
 ///     .execute_webhook(id, "webhook token")
 ///     .content("Pinkie...")
+///     .exec()
 ///     .await?;
 /// # Ok(()) }
 /// ```
@@ -58,7 +59,6 @@ pub(crate) struct ExecuteWebhookFields {
 pub struct ExecuteWebhook<'a> {
     pub(crate) fields: ExecuteWebhookFields,
     files: Vec<(String, Vec<u8>)>,
-    fut: Option<PendingResponse<'a, EmptyBody>>,
     pub(super) http: &'a Client,
     token: String,
     webhook_id: WebhookId,
@@ -69,7 +69,6 @@ impl<'a> ExecuteWebhook<'a> {
         Self {
             fields: ExecuteWebhookFields::default(),
             files: Vec::new(),
-            fut: None,
             http,
             token: token.into(),
             webhook_id,
@@ -148,6 +147,7 @@ impl<'a> ExecuteWebhook<'a> {
     ///     .content("some content")
     ///     .embeds(vec![EmbedBuilder::new().title("title").build()?])
     ///     .wait()
+    ///     .exec()
     ///     .await?
     ///     .model()
     ///     .await?;
@@ -169,6 +169,7 @@ impl<'a> ExecuteWebhook<'a> {
     ///     .content("some content")
     ///     .payload_json(r#"{ "content": "other content", "embeds": [ { "title": "title" } ] }"#)
     ///     .wait()
+    ///     .exec()
     ///     .await?
     ///     .model()
     ///     .await?;
@@ -205,11 +206,12 @@ impl<'a> ExecuteWebhook<'a> {
     /// Using this will result in receiving the created message.
     ///
     /// [Discord Docs/Execute Webhook]: https://discord.com/developers/docs/resources/webhook#execute-webhook-querystring-params
+    #[allow(clippy::missing_const_for_fn)]
     pub fn wait(self) -> ExecuteWebhookAndWait<'a> {
         ExecuteWebhookAndWait::new(self)
     }
 
-    pub(super) fn request(&mut self, wait: bool) -> Result<Request, Error> {
+    pub(super) fn request(self, wait: bool) -> Result<(Request, &'a Client), Error> {
         let mut request = Request::builder(Route::ExecuteWebhook {
             token: self.token.clone(),
             wait: Some(wait),
@@ -223,14 +225,15 @@ impl<'a> ExecuteWebhook<'a> {
         if !self.files.is_empty() || self.fields.payload_json.is_some() {
             let mut form = Form::new();
 
-            for (index, (name, file)) in self.files.drain(..).enumerate() {
-                form.file(format!("{}", index).as_bytes(), name.as_bytes(), &file);
+            for (index, (name, file)) in self.files.iter().enumerate() {
+                form.file(format!("{}", index).as_bytes(), name.as_bytes(), file);
             }
 
             if let Some(payload_json) = &self.fields.payload_json {
                 form.payload_json(&payload_json);
             } else {
                 let body = crate::json::to_vec(&self.fields).map_err(Error::json)?;
+
                 form.payload_json(&body);
             }
 
@@ -239,16 +242,18 @@ impl<'a> ExecuteWebhook<'a> {
             request = request.json(&self.fields)?;
         }
 
-        Ok(request.build())
+        Ok((request.build(), self.http))
     }
 
-    fn start(&mut self) -> Result<(), Error> {
-        let request = self.request(false)?;
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<EmptyBody> {
+        let (request, client) = match self.request(false) {
+            Ok((request, client)) => (request, client),
+            Err(source) => return ResponseFuture::error(source),
+        };
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        client.request(request)
     }
 }
-
-poll_req!(ExecuteWebhook<'_>, EmptyBody);

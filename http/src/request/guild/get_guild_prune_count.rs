@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{validate, PendingResponse, Request},
+    request::{validate, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use std::{
@@ -74,7 +74,6 @@ struct GetGuildPruneCountFields {
 /// Get the counts of guild members to be pruned.
 pub struct GetGuildPruneCount<'a> {
     fields: GetGuildPruneCountFields,
-    fut: Option<PendingResponse<'a, GuildPrune>>,
     guild_id: GuildId,
     http: &'a Client,
 }
@@ -83,7 +82,6 @@ impl<'a> GetGuildPruneCount<'a> {
     pub(crate) fn new(http: &'a Client, guild_id: GuildId) -> Self {
         Self {
             fields: GetGuildPruneCountFields::default(),
-            fut: None,
             guild_id,
             http,
         }
@@ -119,20 +117,19 @@ impl<'a> GetGuildPruneCount<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<GuildPrune> {
         let request = Request::from_route(Route::GetGuildPruneCount {
             days: self.fields.days,
             guild_id: self.guild_id.0,
-            include_roles: self.fields.include_roles.clone(),
+            include_roles: self.fields.include_roles,
         });
 
-        self.fut.replace(Box::pin(self.http.request(request)));
-
-        Ok(())
+        self.http.request(request)
     }
 }
-
-poll_req!(GetGuildPruneCount<'_>, GuildPrune);
 
 #[cfg(test)]
 mod test {

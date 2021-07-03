@@ -1,10 +1,7 @@
 use crate::{
     client::Client,
-    error::Error as HttpError,
-    request::{
-        self, validate, AuditLogReason, AuditLogReasonError, NullableField, PendingResponse,
-        Request,
-    },
+    request::{self, validate, AuditLogReason, AuditLogReasonError, NullableField, Request},
+    response::ResponseFuture,
     routing::Route,
 };
 use serde::Serialize;
@@ -114,7 +111,6 @@ struct UpdateGuildFields {
 /// [the discord docs]: https://discord.com/developers/docs/resources/guild#modify-guild
 pub struct UpdateGuild<'a> {
     fields: UpdateGuildFields,
-    fut: Option<PendingResponse<'a, PartialGuild>>,
     guild_id: GuildId,
     http: &'a Client,
     reason: Option<String>,
@@ -124,7 +120,6 @@ impl<'a> UpdateGuild<'a> {
     pub(crate) fn new(http: &'a Client, guild_id: GuildId) -> Self {
         Self {
             fields: UpdateGuildFields::default(),
-            fut: None,
             guild_id,
             http,
             reason: None,
@@ -341,20 +336,29 @@ impl<'a> UpdateGuild<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), HttpError> {
+    /// Execute the request, returning a future resolving to a [`Response`].
+    ///
+    /// [`Response`]: crate::response::Response
+    pub fn exec(self) -> ResponseFuture<PartialGuild> {
         let mut request = Request::builder(Route::UpdateGuild {
             guild_id: self.guild_id.0,
-        })
-        .json(&self.fields)?;
+        });
+
+        request = match request.json(&self.fields) {
+            Ok(request) => request,
+            Err(source) => return ResponseFuture::error(source),
+        };
 
         if let Some(reason) = &self.reason {
-            request = request.headers(request::audit_header(reason)?)
+            let header = match request::audit_header(reason) {
+                Ok(header) => header,
+                Err(source) => return ResponseFuture::error(source),
+            };
+
+            request = request.headers(header);
         }
 
-        self.fut
-            .replace(Box::pin(self.http.request(request.build())));
-
-        Ok(())
+        self.http.request(request.build())
     }
 }
 
@@ -366,5 +370,3 @@ impl<'a> AuditLogReason for UpdateGuild<'a> {
         Ok(self)
     }
 }
-
-poll_req!(UpdateGuild<'_>, PartialGuild);
