@@ -42,6 +42,10 @@ bitflags! {
         const REQUEST_TO_SPEAK = 0x10000_0000;
         /// Allows for deleting and archiving threads, and viewing all private threads.
         const MANAGE_THREADS = 0x40000_0000;
+        /// Allows for creating and participating in public threads.
+        const USE_PUBLIC_THREADS = 0x0008_0000_0000;
+        /// Allows for creating and participating in private threads.
+        const USE_PRIVATE_THREADS = 0x0010_0000_0000;
     }
 }
 
@@ -83,7 +87,26 @@ impl Serialize for Permissions {
 #[cfg(test)]
 mod tests {
     use super::Permissions;
+    use serde::{Deserialize, Serialize};
     use serde_test::Token;
+    use static_assertions::{assert_impl_all, const_assert_eq};
+    use std::{fmt::Debug, hash::Hash};
+
+    assert_impl_all!(
+        Permissions: Copy,
+        Clone,
+        Debug,
+        Deserialize<'static>,
+        Eq,
+        Hash,
+        PartialEq,
+        Ord,
+        Send,
+        Serialize,
+        Sync
+    );
+    const_assert_eq!(0x8_0000_0000, Permissions::USE_PUBLIC_THREADS.bits());
+    const_assert_eq!(0x10_0000_0000, Permissions::USE_PRIVATE_THREADS.bits());
 
     #[test]
     fn test_permissions() {
