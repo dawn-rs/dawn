@@ -7,7 +7,7 @@ use std::{
     error::Error,
     fmt::{Display, Formatter, Result as FmtResult},
 };
-use twilight_model::channel::embed::Embed;
+use twilight_model::channel::{embed::Embed, ChannelType};
 
 /// An embed is not valid.
 ///
@@ -454,6 +454,15 @@ fn _command_description(value: &str) -> bool {
 pub fn command_permissions(len: usize) -> bool {
     // https://discord.com/developers/docs/interactions/slash-commands#edit-application-command-permissions
     (0..=10).contains(&len)
+}
+
+pub const fn is_thread(channel_type: ChannelType) -> bool {
+    matches!(
+        channel_type,
+        ChannelType::GuildNewsThread
+            | ChannelType::GuildPublicThread
+            | ChannelType::GuildPrivateThread
+    )
 }
 
 #[cfg(test)]
