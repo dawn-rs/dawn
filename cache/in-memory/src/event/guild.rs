@@ -247,7 +247,6 @@ mod tests {
             member_count: 0,
             thread_metadata: ThreadMetadata {
                 archived: false,
-                archiver_id: None,
                 auto_archive_duration: AutoArchiveDuration::Hour,
                 archive_timestamp: "".to_string(),
                 locked: false,

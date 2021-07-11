@@ -58,7 +58,6 @@ mod tests {
             rate_limit_per_user: Some(8),
             thread_metadata: ThreadMetadata {
                 archived: true,
-                archiver_id: Some(UserId(9)),
                 auto_archive_duration: AutoArchiveDuration::Hour,
                 archive_timestamp: "123".to_string(),
                 locked: true,
@@ -124,14 +123,10 @@ mod tests {
                 Token::Str("thread_metadata"),
                 Token::Struct {
                     name: "ThreadMetadata",
-                    len: 5,
+                    len: 4,
                 },
                 Token::Str("archived"),
                 Token::Bool(true),
-                Token::Str("archiver_id"),
-                Token::Some,
-                Token::NewtypeStruct { name: "UserId" },
-                Token::Str("9"),
                 Token::Str("auto_archive_duration"),
                 Token::U16(60),
                 Token::Str("archive_timestamp"),
