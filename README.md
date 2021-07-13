@@ -18,7 +18,7 @@ functionality. Please use the individual crates listed below instead!
 
 ## Installation
 
-Twilight supports a MSRV of Rust 1.49+.
+Twilight supports a MSRV of Rust 1.51+.
 
 We recommend that most users start out with these crates added to your
 `Cargo.toml`'s `[dependencies]` section:
@@ -223,7 +223,7 @@ All first-party crates are licensed under [ISC][LICENSE.md]
 [license badge]: https://img.shields.io/badge/license-ISC-blue.svg?style=for-the-badge&logo=pastebin
 [license link]: https://github.com/twilight-rs/twilight/blob/main/LICENSE.md
 [logo]: https://raw.githubusercontent.com/twilight-rs/twilight/main/logo.png
-[rust badge]: https://img.shields.io/badge/rust-1.49+-93450a.svg?style=for-the-badge&logo=rust
+[rust badge]: https://img.shields.io/badge/rust-1.51+-93450a.svg?style=for-the-badge&logo=rust
 [`tracing-log`]: https://github.com/tokio-rs/tracing/tree/master/tracing-log
 [`twilight-cache-inmemory`]: https://twilight.rs/chapter_1_crates/section_4_cache_inmemory.html
 [`twilight-command-parser`]: https://twilight.rs/chapter_1_crates/section_5_command_parser.html

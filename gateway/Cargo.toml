@@ -15,7 +15,7 @@ repository = "https://github.com/twilight-rs/twilight.git"
 version = "0.5.1"
 
 [dependencies]
-tokio-tungstenite = { default-features = false, features = ["connect"], version = "0.14" }
+tokio-tungstenite = { default-features = false, features = ["connect"], version = "0.15" }
 bitflags = { default-features = false, version = "1" }
 twilight-gateway-queue = { default-features = false, path = "./queue" }
 twilight-http = { default-features = false, path = "../http" }

@@ -15,7 +15,7 @@ repository = "https://github.com/twilight-rs/twilight.git"
 version = "0.5.0"
 
 [dependencies]
-tokio-tungstenite = { default-features = false, features = ["connect"], version = "0.14" }
+tokio-tungstenite = { default-features = false, features = ["connect"], version = "0.15" }
 dashmap = { default-features = false, version = "4.0" }
 futures-util = { default-features = false, features = ["bilock", "std", "unstable"], version = "0.3" }
 http = { default-features = false, optional = true, version = "0.2" }
