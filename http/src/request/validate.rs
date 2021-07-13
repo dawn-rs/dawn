@@ -7,7 +7,349 @@ use std::{
     error::Error,
     fmt::{Display, Formatter, Result as FmtResult},
 };
-use twilight_model::channel::embed::Embed;
+use twilight_model::{
+    application::component::{select_menu::SelectMenuOption, Component, ComponentType},
+    channel::embed::Embed,
+};
+
+/// A provided [`Component`] is invalid.
+///
+/// While multiple components may be invalid, validation will short-circuit on
+/// the first invalid component.
+#[derive(Debug)]
+pub struct ComponentValidationError {
+    kind: ComponentValidationErrorType,
+}
+
+impl ComponentValidationError {
+    /// Maximum number of [`Component`]s allowed inside an [`ActionRow`].
+    ///
+    /// This is defined in Discord's documentation, per
+    /// [Discord Docs/Action Rows][1].
+    ///
+    /// [`ActionRow`]: twilight_model::application::component::ActionRow
+    /// [1]: https://discord.com/developers/docs/interactions/message-components#action-rows
+    pub const ACTION_ROW_COMPONENT_COUNT: usize = 5;
+
+    /// Maximum number of root [`Component`]s in a message.
+    ///
+    /// This is defined in Discord's documentation, per
+    /// [Discord Docs/Action Row][1].
+    ///
+    /// [1]: https://discord.com/developers/docs/interactions/message-components#action-rows
+    pub const COMPONENT_COUNT: usize = 5;
+
+    /// Maximum length of a [`Component`] custom ID in codepoints.
+    ///
+    /// An example of a component with a custom ID is the
+    /// [`Button`][`Button::custom_id`].
+    ///
+    /// This is defined in Discord's documentation, per
+    /// [Discord Docs/Components][1].
+    ///
+    /// [`Button::custom_id`]: twilight_model::application::component::button::Button::custom_id
+    /// [1]: https://discord.com/developers/docs/interactions/message-components#component-object-component-structure
+    pub const COMPONENT_CUSTOM_ID_LENGTH: usize = 100;
+
+    /// Maximum [`Component`] label length in codepoints.
+    ///
+    /// An example of a component with a label is the [`Button`][`Button::label`].
+    ///
+    /// This is defined in Discord's documentation, per
+    /// [Discord Docs/Components][1].
+    ///
+    /// [`Button::label`]: twilight_model::application::component::button::Button::label
+    /// [1]: https://discord.com/developers/docs/interactions/message-components#component-object-component-structure
+    pub const COMPONENT_LABEL_LENGTH: usize = 80;
+
+    /// Maximum number of [`SelectMenuOption`]s that can be chosen in a
+    /// [`SelectMenu`].
+    ///
+    /// This is defined in Dicsord's documentation, per
+    /// [Discord Docs/Select Menu][1].
+    ///
+    /// [`SelectMenuOption`]: twilight_model::application::component::select_menu::SelectMenuOption
+    /// [`SelectMenu`]: twilight_model::application::component::select_menu::SelectMenu
+    /// [1]: https://discord.com/developers/docs/interactions/message-components#select-menu-object-select-menu-structure
+    pub const SELECT_MAXIMUM_VALUES_LIMIT: usize = 25;
+
+    /// Minimum number of [`SelectMenuOption`]s that can be chosen in a
+    /// [`SelectMenu`].
+    ///
+    /// This is defined in Dicsord's documentation, per
+    /// [Discord Docs/Select Menu][1].
+    ///
+    /// [`SelectMenuOption`]: twilight_model::application::component::select_menu::SelectMenuOption
+    /// [`SelectMenu`]: twilight_model::application::component::select_menu::SelectMenu
+    /// [1]: https://discord.com/developers/docs/interactions/message-components#select-menu-object-select-menu-structure
+    pub const SELECT_MAXIMUM_VALUES_REQUIREMENT: usize = 1;
+
+    /// Maximum number of [`SelectMenuOption`]s that must be chosen in a
+    /// [`SelectMenu`].
+    ///
+    /// This is defined in Dicsord's documentation, per
+    /// [Discord Docs/Select Menu][1].
+    ///
+    /// [`SelectMenuOption`]: twilight_model::application::component::select_menu::SelectMenuOption
+    /// [`SelectMenu`]: twilight_model::application::component::select_menu::SelectMenu
+    /// [1]: https://discord.com/developers/docs/interactions/message-components#select-menu-object-select-menu-structure
+    pub const SELECT_MINIMUM_VALUES_LIMIT: usize = 25;
+
+    /// Maximum number of [`SelectMenuOption`]s in a [`SelectMenu`].
+    ///
+    /// This is defined in Discord's documentation, per
+    /// [Discord Docs/Select Menu][1].
+    ///
+    /// [`SelectMenuOption`]: twilight_model::application::component::select_menu::SelectMenuOption
+    /// [`SelectMenu`]: twilight_model::application::component::select_menu::SelectMenu
+    /// [1]: https://discord.com/developers/docs/interactions/message-components#select-menu-object-select-menu-structure
+    pub const SELECT_OPTION_COUNT: usize = 25;
+
+    /// Maximum length of a [`SelectMenuOption::description`] in codepoints.
+    ///
+    /// This is defined in Discord's documentation, per
+    /// [Discord Docs/Select Menu Option][1].
+    ///
+    /// [1]: https://discord.com/developers/docs/interactions/message-components#select-menu-object-select-option-structure
+    pub const SELECT_OPTION_DESCRIPTION_LENGTH: usize = 50;
+
+    /// Maximum length of a [`SelectMenuOption::label`] in codepoints.
+    ///
+    /// This is defined in Discord's documentation, per
+    /// [Discord Docs/Select Menu Option][1].
+    ///
+    /// [`SelectMenuOption::label`]: twilight_model::application::component::select_menu::SelectMenuOption::label
+    /// [1]: https://discord.com/developers/docs/interactions/message-components#select-menu-object-select-option-structure
+    pub const SELECT_OPTION_LABEL_LENGTH: usize = 25;
+
+    /// Maximum length of a [`SelectMenuOption::value`] in codepoints.
+    ///
+    /// This is defined in Discord's documentation, per
+    /// [Discord Docs/Select Menu Option][1].
+    ///
+    /// [`SelectMenuOption::value`]: twilight_model::application::component::select_menu::SelectMenuOption::value
+    /// [1]: https://discord.com/developers/docs/interactions/message-components#select-menu-object-select-option-structure
+    pub const SELECT_OPTION_VALUE_LENGTH: usize = 100;
+
+    /// Maximum length of a [`SelectMenu::placeholder`] in codepoints.
+    ///
+    /// This is defined in Discord's documentation, per
+    /// [Discord Docs/Select Menu][1].
+    ///
+    /// [`SelectMenu::placeholder`]: twilight_model::application::component::select_menu::SelectMenu::placeholder
+    /// [1]: https://discord.com/developers/docs/interactions/message-components#select-menu-object-select-menu-structure
+    pub const SELECT_PLACEHOLDER_LENGTH: usize = 100;
+
+    /// Consume the error, returning the owned error type and the source error.
+    #[must_use = "consuming the error into its parts has no effect if left unused"]
+    pub fn into_parts(
+        self,
+    ) -> (
+        ComponentValidationErrorType,
+        Option<Box<dyn Error + Send + Sync>>,
+    ) {
+        (self.kind, None)
+    }
+}
+
+impl Display for ComponentValidationError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        match &self.kind {
+            ComponentValidationErrorType::ActionRowComponentCount { count } => {
+                f.write_str("an action row has ")?;
+                Display::fmt(&count, f)?;
+                f.write_str(" children, but the max is ")?;
+
+                Display::fmt(&Self::ACTION_ROW_COMPONENT_COUNT, f)
+            }
+            ComponentValidationErrorType::ComponentCount { count } => {
+                Display::fmt(count, f)?;
+                f.write_str(" components were provided, but the max is ")?;
+
+                Display::fmt(&Self::COMPONENT_COUNT, f)
+            }
+            ComponentValidationErrorType::ComponentCustomIdLength { chars } => {
+                f.write_str("a component's custom id is ")?;
+                Display::fmt(&chars, f)?;
+                f.write_str(" characters long, but the max is ")?;
+
+                Display::fmt(&Self::COMPONENT_CUSTOM_ID_LENGTH, f)
+            }
+            ComponentValidationErrorType::ComponentLabelLength { chars } => {
+                f.write_str("a component's label is ")?;
+                Display::fmt(&chars, f)?;
+                f.write_str(" characters long, but the max is ")?;
+
+                Display::fmt(&Self::COMPONENT_LABEL_LENGTH, f)
+            }
+            ComponentValidationErrorType::InvalidChildComponent { kind } => {
+                f.write_str("a '")?;
+                Display::fmt(&kind, f)?;
+
+                f.write_str(" component was provided, but can not be a child component")
+            }
+            ComponentValidationErrorType::InvalidRootComponent { kind } => {
+                f.write_str("a '")?;
+                Display::fmt(kind, f)?;
+
+                f.write_str("' component was provided, but can not be a root component")
+            }
+            ComponentValidationErrorType::SelectMaximumValuesCount { count } => {
+                f.write_str("maximum number of values that can be chosen is ")?;
+                Display::fmt(count, f)?;
+                f.write_str(", but must be greater than or equal to ")?;
+                Display::fmt(&Self::SELECT_MAXIMUM_VALUES_REQUIREMENT, f)?;
+                f.write_str("and less than or equal to ")?;
+
+                Display::fmt(&Self::SELECT_MAXIMUM_VALUES_LIMIT, f)
+            }
+            ComponentValidationErrorType::SelectMinimumValuesCount { count } => {
+                f.write_str("maximum number of values that must be chosen is ")?;
+                Display::fmt(count, f)?;
+                f.write_str(", but must be less than or equal to ")?;
+
+                Display::fmt(&Self::SELECT_MAXIMUM_VALUES_LIMIT, f)
+            }
+            ComponentValidationErrorType::SelectOptionDescriptionLength { chars } => {
+                f.write_str("a select menu option's description is ")?;
+                Display::fmt(&chars, f)?;
+                f.write_str(" characters long, but the max is ")?;
+
+                Display::fmt(&Self::SELECT_OPTION_DESCRIPTION_LENGTH, f)
+            }
+            ComponentValidationErrorType::SelectOptionLabelLength { chars } => {
+                f.write_str("a select menu option's label is ")?;
+                Display::fmt(&chars, f)?;
+                f.write_str(" characters long, but the max is ")?;
+
+                Display::fmt(&Self::SELECT_OPTION_LABEL_LENGTH, f)
+            }
+            ComponentValidationErrorType::SelectOptionValueLength { chars } => {
+                f.write_str("a select menu option's value is ")?;
+                Display::fmt(&chars, f)?;
+                f.write_str(" characters long, but the max is ")?;
+
+                Display::fmt(&Self::SELECT_OPTION_VALUE_LENGTH, f)
+            }
+            ComponentValidationErrorType::SelectPlaceholderLength { chars } => {
+                f.write_str("a select menu's placeholder is ")?;
+                Display::fmt(&chars, f)?;
+                f.write_str(" characters long, but the max is ")?;
+
+                Display::fmt(&Self::SELECT_PLACEHOLDER_LENGTH, f)
+            }
+            ComponentValidationErrorType::SelectOptionCount { count } => {
+                f.write_str("a select menu has ")?;
+                Display::fmt(&count, f)?;
+                f.write_str(" options, but the max is ")?;
+
+                Display::fmt(&Self::SELECT_OPTION_COUNT, f)
+            }
+        }
+    }
+}
+
+impl Error for ComponentValidationError {}
+
+/// Type of [`ComponentValidationError`] that occurred.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum ComponentValidationErrorType {
+    /// Number of components a provided [`ActionRow`] is larger than
+    /// [the maximum][`ACTION_ROW_COMPONENT_COUNT`].
+    ///
+    /// [`ActionRow`]: twilight_model::application::component::ActionRow
+    /// [`ACTION_ROW_COMPONENT_COUNT`]: ComponentValidationError::ACTION_ROW_COMPONENT_COUNT
+    ActionRowComponentCount {
+        /// Number of components within the action row.
+        count: usize,
+    },
+    /// Number of components provided is larger than
+    /// [the maximum][`COMPONENT_COUNT`].
+    ///
+    /// [`COMPONENT_COUNT`]: ComponentValidationError::COMPONENT_COUNT
+    ComponentCount {
+        /// Number of components that were provided.
+        count: usize,
+    },
+    /// Component custom ID is larger than the
+    /// [the maximum][`COMPONENT_CUSTOM_ID_LENGTH`].
+    ///
+    /// [`COMPONENT_CUSTOM_ID_LENGTH`]: ComponentValidationError::COMPONENT_CUSTOM_ID_LENGTH
+    ComponentCustomIdLength {
+        /// Number of codepoints that were provided.
+        chars: usize,
+    },
+    /// Component label is larger than [the maximum][`COMPONENT_LABEL_LENGTH`].
+    ///
+    /// [`COMPONENT_LABEL_LENGTH`]: ComponentValidationError::COMPONENT_LABEL_LENGTH
+    ComponentLabelLength {
+        /// Number of codepoints that were provided.
+        chars: usize,
+    },
+    /// Provided component cannot be a child component.
+    InvalidChildComponent {
+        /// Type of provided component.
+        kind: ComponentType,
+    },
+    /// Provided component cannot be a root component.
+    InvalidRootComponent {
+        /// Type of provided component.
+        kind: ComponentType,
+    },
+    /// Maximum number of items that can be chosen is smaller than
+    /// [the minimum][`SELECT_MAXIMUM_VALUES_REQUIREMENT`] or larger than
+    /// [the maximum][`SELECT_MAXIMUM_VALUES_LIMIT`].
+    ///
+    /// [`SELECT_MAXIMUM_VALUES_LIMIT`]: ComponentValidationError::SELECT_MAXIMUM_VALUES_LIMIT
+    /// [`SELECT_MAXIMUM_VALUES_REQUIREMENT`]: ComponentValidationError::SELECT_MAXIMUM_VALUES_REQUIREMENT
+    SelectMaximumValuesCount { count: usize },
+    /// Minimum number of items that must be chosen is larger than
+    /// [the maximum][`SELECT_MINIMUM_VALUES_LIMIT`].
+    ///
+    /// [`SELECT_MINIMUM_VALUES_LIMIT`]: ComponentValidationError::SELECT_MINIMUM_VALUES_LIMIT
+    SelectMinimumValuesCount { count: usize },
+    /// Number of select menu options provided is larger than
+    /// [the maximum][`SELECT_OPTION_COUNT`].
+    ///
+    /// [`SELECT_OPTION_COUNT`]: ComponentValidationError::SELECT_OPTION_COUNT
+    SelectOptionCount {
+        /// Number of options that were provided.
+        count: usize,
+    },
+    /// Description of a select menu option is larger than
+    /// [the maximum][`SELECT_OPTION_DESCRIPTION_LENGTH`].
+    ///
+    /// [`SELECT_OPTION_DESCRIPTION_LENGTH`]: ComponentValidationError::SELECT_OPTION_DESCRIPTION_LENGTH
+    SelectOptionDescriptionLength {
+        /// Number of codepoints that were provided.
+        chars: usize,
+    },
+    /// Label of a select menu option is larger than
+    /// [the maximum][`SELECT_OPTION_LABEL_LENGTH`].
+    ///
+    /// [`SELECT_OPTION_LABEL_LENGTH`]: ComponentValidationError::SELECT_OPTION_LABEL_LENGTH
+    SelectOptionLabelLength {
+        /// Number of codepoints that were provided.
+        chars: usize,
+    },
+    /// Value of a select menu option is larger than
+    /// [the maximum][`SELECT_OPTION_VALUE_LENGTH`].
+    ///
+    /// [`SELECT_OPTION_VALUE_LENGTH`]: ComponentValidationError::SELECT_OPTION_VALUE_LENGTH
+    SelectOptionValueLength {
+        /// Number of codepoints that were provided.
+        chars: usize,
+    },
+    /// Placeholder of a component is larger than the
+    /// [maximum][`SELECT_PLACEHOLDER_LENGTH`].
+    ///
+    /// [`SELECT_PLACEHOLDER_LENGTH`]: ComponentValidationError::SELECT_PLACEHOLDER_LENGTH
+    SelectPlaceholderLength {
+        /// Number of codepoints that were provided.
+        chars: usize,
+    },
+}
 
 /// An embed is not valid.
 ///
@@ -215,6 +557,352 @@ fn _channel_name(value: &str) -> bool {
 
     // <https://discordapp.com/developers/docs/resources/channel#channel-object-channel-structure>
     (1..=100).contains(&len)
+}
+
+/// Validate a list of components.
+///
+/// # Errors
+///
+/// Returns a [`ComponentValidationErrorType::ComponentCount`] if there are
+/// too many components in the provided list.
+///
+/// Refer to the errors section of [`component`] for a list of errors that may
+/// be returned as a result of validating each provided component.
+pub fn components(components: &[Component]) -> Result<(), ComponentValidationError> {
+    let count = components.len();
+
+    if count > ComponentValidationError::COMPONENT_COUNT {
+        return Err(ComponentValidationError {
+            kind: ComponentValidationErrorType::ComponentCount { count },
+        });
+    }
+
+    for component in components {
+        self::component(component)?;
+    }
+
+    Ok(())
+}
+
+/// Validate the contents of a component.
+///
+/// # Errors
+///
+/// Returns a [`ComponentValidationErrorType::ActionRowComponentCount`] error
+/// type if the provided list of components is too many for an [`ActionRow`].
+///
+/// Returns a [`ComponentValidationErrorType::InvalidChildComponent`] if the
+/// provided nested component is an [`ActionRow`]. Action rows can not
+/// contain another action row.
+///
+/// [`ActionRow`]: twilight_model::application::component::ActionRow
+pub fn component(component: &Component) -> Result<(), ComponentValidationError> {
+    match component {
+        Component::ActionRow(action_row) => {
+            component_action_row_components(&action_row.components)?;
+
+            for inner in &action_row.components {
+                self::component_inner(inner)?;
+            }
+        }
+        other => {
+            return Err(ComponentValidationError {
+                kind: ComponentValidationErrorType::InvalidRootComponent { kind: other.kind() },
+            });
+        }
+    }
+
+    Ok(())
+}
+
+/// Validate the contents of a component that is within another component, i.e.
+/// one that is not a root component.
+///
+/// # Errors
+///
+/// Returns a [`ComponentValidationErrorType::InvalidChildComponent`] if a
+/// provided nested component is a [`Component::ActionRow`]. Action rows can not
+/// contain another action row.
+///
+/// Returns a [`ComponentValidationErrorType::OptionDescriptionLength`] error
+/// type if a provided select option description is too long.
+///
+/// Returns a [`ComponentValidationErrorType::OptionLabelLength`] error type if
+/// a provided select option label is too long.
+///
+/// Returns a [`ComponentValidationErrorType::OptionValueLength`] error type if
+/// a provided select option value is too long.
+///
+/// Returns a [`ComponentValidationErrorType::SelectMaximumValuesCount`] if the
+/// provided number of select menu values that can be chosen is smaller than the minimum or
+/// larger than the maximum.
+///
+/// Returns a [`ComponentValidationErrorType::SelectMinimumValuesCount`] if the
+/// provided number of select menu values that must be chosen is larger than the
+/// maximum.
+///
+/// Returns a [`ComponentValidationErrorType::SelectPlaceholderLength`] error type if
+/// a provided select placeholder is too long.
+fn component_inner(component: &Component) -> Result<(), ComponentValidationError> {
+    match component {
+        Component::ActionRow(_) => {
+            return Err(ComponentValidationError {
+                kind: ComponentValidationErrorType::InvalidChildComponent {
+                    kind: ComponentType::ActionRow,
+                },
+            })
+        }
+        Component::Button(button) => {
+            if let Some(custom_id) = button.custom_id.as_ref() {
+                component_custom_id(custom_id)?;
+            }
+
+            if let Some(label) = button.label.as_ref() {
+                component_label(label)?;
+            }
+        }
+        Component::SelectMenu(select_menu) => {
+            component_custom_id(&select_menu.custom_id)?;
+            component_select_options(&select_menu.options)?;
+
+            if let Some(placeholder) = select_menu.placeholder.as_ref() {
+                component_select_placeholder(placeholder)?;
+            }
+
+            if let Some(max_values) = select_menu.max_values {
+                component_select_max_values(usize::from(max_values))?;
+            }
+
+            if let Some(min_values) = select_menu.min_values {
+                component_select_min_values(usize::from(min_values))?;
+            }
+
+            for option in &select_menu.options {
+                component_select_option_label(&option.label)?;
+                component_select_option_value(&option.value)?;
+
+                if let Some(description) = option.description.as_ref() {
+                    component_option_description(description)?;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Validate that an [`ActionRow`] does not contain too many components.
+///
+/// [`ActionRow`]s may only have so many components within it, defined by
+/// [`ComponentValidationError::ACTION_ROW_COMPONENT_COUNT`].
+///
+/// # Errors
+///
+/// Returns a [`ComponentValidationErrorType::ActionRowComponentCount`] error
+/// type if the provided list of components is too many for an [`ActionRow`].
+const fn component_action_row_components(
+    components: &[Component],
+) -> Result<(), ComponentValidationError> {
+    let count = components.len();
+
+    if count > ComponentValidationError::COMPONENT_COUNT {
+        return Err(ComponentValidationError {
+            kind: ComponentValidationErrorType::ActionRowComponentCount { count },
+        });
+    }
+
+    Ok(())
+}
+
+/// Validate that a [`Component`]s label is not too long.
+///
+/// # Errors
+///
+/// Returns a [`ComponentValidationErrorType::ComponentLabelLength`] if the
+/// provided component label is too long.
+fn component_label(label: &str) -> Result<(), ComponentValidationError> {
+    let chars = label.chars().count();
+
+    if chars > ComponentValidationError::COMPONENT_LABEL_LENGTH {
+        return Err(ComponentValidationError {
+            kind: ComponentValidationErrorType::ComponentLabelLength { chars },
+        });
+    }
+
+    Ok(())
+}
+
+/// Validate that a custom ID is not too long.
+///
+/// # Errors
+///
+/// Returns a [`ComponentValidationErrorType::ComponentCustomIdLength`] if the provided
+/// custom ID is too long.
+fn component_custom_id(custom_id: &str) -> Result<(), ComponentValidationError> {
+    let chars = custom_id.chars().count();
+
+    if chars > ComponentValidationError::COMPONENT_CUSTOM_ID_LENGTH {
+        return Err(ComponentValidationError {
+            kind: ComponentValidationErrorType::ComponentCustomIdLength { chars },
+        });
+    }
+
+    Ok(())
+}
+
+/// Validate a [`SelectMenuOption::description`]'s length.
+///
+/// # Errors
+///
+/// Returns a [`ComponentValidationErrorType::SelectOptionDescriptionLength`] if the
+/// provided select option description is too long.
+///
+/// [`SelectMenuOption::description`]: twilight_model::application::component::select_menu::SelectMenuOption::description
+fn component_option_description(description: &str) -> Result<(), ComponentValidationError> {
+    let chars = description.chars().count();
+
+    if chars > ComponentValidationError::SELECT_OPTION_DESCRIPTION_LENGTH {
+        return Err(ComponentValidationError {
+            kind: ComponentValidationErrorType::SelectOptionDescriptionLength { chars },
+        });
+    }
+
+    Ok(())
+}
+
+/// Validate a [`SelectMenu::max_values`] amount.
+///
+/// # Errors
+///
+/// Returns a [`ComponentValidationErrorType::SelectMaximumValuesCount`] if the
+/// provided number of values that can be chosen is smaller than
+/// [the minimum][`SELECT_MAXIMUM_VALUES_REQUIREMENT`] or larger than
+/// [the maximum][`SELECT_MAXIMUM_VALUES_LIMIT`].
+///
+/// [`SELECT_MAXIMUM_VALUES_LIMIT`]: ComponentValidationError::SELECT_MAXIMUM_VALUES_LIMIT
+/// [`SELECT_MAXIMUM_VALUES_REQUIREMENT`]: ComponentValidationError::SELECT_MAXIMUM_VALUES_REQUIREMENT
+/// [`SelectMenu::max_values`]: twilight_model::application::component::select_menu::SelectMenu::max_values
+const fn component_select_max_values(count: usize) -> Result<(), ComponentValidationError> {
+    if count > ComponentValidationError::SELECT_MAXIMUM_VALUES_LIMIT {
+        return Err(ComponentValidationError {
+            kind: ComponentValidationErrorType::SelectMaximumValuesCount { count },
+        });
+    }
+
+    if count < ComponentValidationError::SELECT_MAXIMUM_VALUES_REQUIREMENT {
+        return Err(ComponentValidationError {
+            kind: ComponentValidationErrorType::SelectMaximumValuesCount { count },
+        });
+    }
+
+    Ok(())
+}
+
+/// Validate a [`SelectMenu::min_values`] amount.
+///
+/// # Errors
+///
+/// Returns a [`ComponentValidationErrorType::SelectMinimumValuesCount`] if the
+/// provided number of values that must be chosen is larger than
+/// [the maximum][`SELECT_MINIMUM_VALUES_LIMIT`].
+///
+/// [`SELECT_MINIMUM_VALUES_LIMIT`]: ComponentValidationError::SELECT_MINIMUM_VALUES_LIMIT
+/// [`SelectMenu::min_values`]: twilight_model::application::component::select_menu::SelectMenu::min_values
+const fn component_select_min_values(count: usize) -> Result<(), ComponentValidationError> {
+    if count > ComponentValidationError::SELECT_MINIMUM_VALUES_LIMIT {
+        return Err(ComponentValidationError {
+            kind: ComponentValidationErrorType::SelectMinimumValuesCount { count },
+        });
+    }
+
+    Ok(())
+}
+
+/// Validate a [`SelectMenuOption::label`]'s length.
+///
+/// # Errors
+///
+/// Returns a [`ComponentValidationErrorType::SelectOptionLabelLength`] if the
+/// provided select option label is too long.
+///
+/// [`SelectMenuOption::label`]: twilight_model::application::component::select_menu::SelectMenuOption::label
+fn component_select_option_label(label: &str) -> Result<(), ComponentValidationError> {
+    let chars = label.chars().count();
+
+    if chars > ComponentValidationError::SELECT_OPTION_LABEL_LENGTH {
+        return Err(ComponentValidationError {
+            kind: ComponentValidationErrorType::SelectOptionLabelLength { chars },
+        });
+    }
+
+    Ok(())
+}
+
+/// Validate a [`SelectMenuOption::value`]'s length.
+///
+/// # Errors
+///
+/// Returns a [`ComponentValidationErrorType::SelectOptionValueLength`] if the
+/// provided select option value is too long.
+///
+/// [`SelectMenuOption::value`]: twilight_model::application::component::select_menu::SelectMenuOption::value
+fn component_select_option_value(value: &str) -> Result<(), ComponentValidationError> {
+    let chars = value.chars().count();
+
+    if chars > ComponentValidationError::SELECT_OPTION_VALUE_LENGTH {
+        return Err(ComponentValidationError {
+            kind: ComponentValidationErrorType::SelectOptionValueLength { chars },
+        });
+    }
+
+    Ok(())
+}
+
+/// Validate a [`SelectMenu`]s number of [`options`].
+///
+/// [`Component::SelectMenu`]s may only have so many options within it, defined
+/// by [`ComponentValidationError::SELECT_OPTION_COUNT`].
+///
+/// # Errors
+///
+/// Returns a [`ComponentValidationErrorType::SelectOptionCount`] error type if
+/// the provided list of [`SelectMenuOption`]s is too many for a [`SelectMenu`].
+///
+/// [`SelectMenuOption`]: twilight_model::application::component::select_menu::SelectMenuOption
+/// [`SelectMenu::options`]: twilight_model::application::component::select_menu::SelectMenu::options
+/// [`SelectMenu`]: twilight_model::application::component::select_menu::SelectMenu
+const fn component_select_options(
+    options: &[SelectMenuOption],
+) -> Result<(), ComponentValidationError> {
+    let count = options.len();
+
+    if count > ComponentValidationError::SELECT_OPTION_COUNT {
+        return Err(ComponentValidationError {
+            kind: ComponentValidationErrorType::SelectOptionCount { count },
+        });
+    }
+
+    Ok(())
+}
+
+/// Validate a [`SelectMenu::placeholder`]'s length.
+///
+/// # Errors
+///
+/// Returns a [`ComponentValidationErrorType::SelectPlaceholderLength`] if the
+/// provided select placeholder is too long.
+///
+/// [`SelectMenu::placeholder`]: twilight_model::application::component::select_menu::SelectMenu::placeholder
+fn component_select_placeholder(placeholder: &str) -> Result<(), ComponentValidationError> {
+    let chars = placeholder.chars().count();
+
+    if chars > ComponentValidationError::SELECT_PLACEHOLDER_LENGTH {
+        return Err(ComponentValidationError {
+            kind: ComponentValidationErrorType::SelectPlaceholderLength { chars },
+        });
+    }
+
+    Ok(())
 }
 
 pub fn content_limit(value: impl AsRef<str>) -> bool {
@@ -459,7 +1147,52 @@ pub fn command_permissions(len: usize) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use static_assertions::{assert_fields, assert_impl_all, const_assert_eq};
+    use std::fmt::Debug;
     use twilight_model::channel::embed::{EmbedAuthor, EmbedField, EmbedFooter};
+
+    assert_fields!(ComponentValidationErrorType::ActionRowComponentCount: count);
+    assert_fields!(ComponentValidationErrorType::ComponentCount: count);
+    assert_fields!(ComponentValidationErrorType::ComponentCustomIdLength: chars);
+    assert_fields!(ComponentValidationErrorType::ComponentLabelLength: chars);
+    assert_fields!(ComponentValidationErrorType::InvalidChildComponent: kind);
+    assert_fields!(ComponentValidationErrorType::InvalidRootComponent: kind);
+    assert_fields!(ComponentValidationErrorType::SelectMaximumValuesCount: count);
+    assert_fields!(ComponentValidationErrorType::SelectMinimumValuesCount: count);
+    assert_fields!(ComponentValidationErrorType::SelectOptionDescriptionLength: chars);
+    assert_fields!(ComponentValidationErrorType::SelectOptionLabelLength: chars);
+    assert_fields!(ComponentValidationErrorType::SelectOptionValueLength: chars);
+    assert_fields!(ComponentValidationErrorType::SelectPlaceholderLength: chars);
+    assert_impl_all!(ComponentValidationErrorType: Debug, Send, Sync);
+    assert_impl_all!(ComponentValidationError: Debug, Send, Sync);
+    assert_impl_all!(EmbedValidationErrorType: Debug, Send, Sync);
+    assert_impl_all!(EmbedValidationError: Debug, Send, Sync);
+    const_assert_eq!(5, ComponentValidationError::ACTION_ROW_COMPONENT_COUNT);
+    const_assert_eq!(5, ComponentValidationError::COMPONENT_COUNT);
+    const_assert_eq!(100, ComponentValidationError::COMPONENT_CUSTOM_ID_LENGTH);
+    const_assert_eq!(80, ComponentValidationError::COMPONENT_LABEL_LENGTH);
+    const_assert_eq!(25, ComponentValidationError::SELECT_MAXIMUM_VALUES_LIMIT);
+    const_assert_eq!(
+        1,
+        ComponentValidationError::SELECT_MAXIMUM_VALUES_REQUIREMENT
+    );
+    const_assert_eq!(25, ComponentValidationError::SELECT_MINIMUM_VALUES_LIMIT);
+    const_assert_eq!(25, ComponentValidationError::SELECT_OPTION_COUNT);
+    const_assert_eq!(
+        50,
+        ComponentValidationError::SELECT_OPTION_DESCRIPTION_LENGTH
+    );
+    const_assert_eq!(25, ComponentValidationError::SELECT_OPTION_LABEL_LENGTH);
+    const_assert_eq!(100, ComponentValidationError::SELECT_OPTION_VALUE_LENGTH);
+    const_assert_eq!(100, ComponentValidationError::SELECT_PLACEHOLDER_LENGTH);
+    const_assert_eq!(256, EmbedValidationError::AUTHOR_NAME_LENGTH);
+    const_assert_eq!(2048, EmbedValidationError::DESCRIPTION_LENGTH);
+    const_assert_eq!(6000, EmbedValidationError::EMBED_TOTAL_LENGTH);
+    const_assert_eq!(25, EmbedValidationError::FIELD_COUNT);
+    const_assert_eq!(256, EmbedValidationError::FIELD_NAME_LENGTH);
+    const_assert_eq!(1024, EmbedValidationError::FIELD_VALUE_LENGTH);
+    const_assert_eq!(2048, EmbedValidationError::FOOTER_TEXT_LENGTH);
+    const_assert_eq!(256, EmbedValidationError::TITLE_LENGTH);
 
     fn base_embed() -> Embed {
         Embed {

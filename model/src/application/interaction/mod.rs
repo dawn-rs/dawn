@@ -1,15 +1,18 @@
 //! Used when recieving interactions through gateway or webhooks.
 
 pub mod application_command;
+pub mod message_component;
+
 mod interaction_type;
 mod ping;
 
 pub use self::{
-    application_command::ApplicationCommand, interaction_type::InteractionType, ping::Ping,
+    application_command::ApplicationCommand, interaction_type::InteractionType,
+    message_component::MessageComponentInteraction, ping::Ping,
 };
 
 use crate::{
-    application::interaction::application_command::CommandData,
+    channel::Message,
     guild::PartialMember,
     id::{ApplicationId, ChannelId, GuildId, InteractionId},
     user::User,
@@ -18,6 +21,7 @@ use serde::{
     de::{Deserializer, Error as DeError, IgnoredAny, MapAccess, Visitor},
     Deserialize, Serialize,
 };
+use serde_value::Value;
 use std::fmt::{Formatter, Result as FmtResult};
 
 /// Payload received when a user executes an interaction.
@@ -34,6 +38,8 @@ pub enum Interaction {
     Ping(Box<Ping>),
     /// Application command variant.
     ApplicationCommand(Box<ApplicationCommand>),
+    /// Message component variant.
+    MessageComponent(Box<MessageComponentInteraction>),
 }
 
 impl Interaction {
@@ -41,6 +47,7 @@ impl Interaction {
         match self {
             Self::Ping(_) => None,
             Self::ApplicationCommand(inner) => inner.guild_id,
+            Self::MessageComponent(inner) => inner.guild_id,
         }
     }
 }
@@ -60,6 +67,7 @@ enum InteractionField {
     GuildId,
     Id,
     Member,
+    Message,
     Token,
     Type,
     User,
@@ -78,10 +86,11 @@ impl<'de> Visitor<'de> for InteractionVisitor {
     fn visit_map<V: MapAccess<'de>>(self, mut map: V) -> Result<Self::Value, V::Error> {
         let mut application_id: Option<ApplicationId> = None;
         let mut channel_id: Option<ChannelId> = None;
-        let mut data: Option<CommandData> = None;
+        let mut data: Option<Value> = None;
         let mut guild_id: Option<Option<GuildId>> = None;
         let mut id: Option<InteractionId> = None;
         let mut member: Option<Option<PartialMember>> = None;
+        let mut message: Option<Message> = None;
         let mut token: Option<String> = None;
         let mut kind: Option<InteractionType> = None;
         let mut user: Option<Option<User>> = None;
@@ -153,6 +162,13 @@ impl<'de> Visitor<'de> for InteractionVisitor {
 
                     member = Some(map.next_value()?);
                 }
+                InteractionField::Message => {
+                    if message.is_some() {
+                        return Err(DeError::duplicate_field("message"));
+                    }
+
+                    message = Some(map.next_value()?);
+                }
                 InteractionField::Token => {
                     if token.is_some() {
                         return Err(DeError::duplicate_field("token"));
@@ -204,7 +220,10 @@ impl<'de> Visitor<'de> for InteractionVisitor {
             }
             InteractionType::ApplicationCommand => {
                 let channel_id = channel_id.ok_or_else(|| DeError::missing_field("channel_id"))?;
-                let data = data.ok_or_else(|| DeError::missing_field("data"))?;
+                let data = data
+                    .ok_or_else(|| DeError::missing_field("data"))?
+                    .deserialize_into()
+                    .map_err(|_| DeError::custom("expected CommandData struct"))?;
 
                 let guild_id = guild_id.unwrap_or_default();
                 let member = member.unwrap_or_default();
@@ -220,6 +239,33 @@ impl<'de> Visitor<'de> for InteractionVisitor {
                     id,
                     kind,
                     member,
+                    token,
+                    user,
+                }))
+            }
+            InteractionType::MessageComponent => {
+                let channel_id = channel_id.ok_or_else(|| DeError::missing_field("channel_id"))?;
+                let data = data
+                    .ok_or_else(|| DeError::missing_field("data"))?
+                    .deserialize_into()
+                    .map_err(|_| {
+                        DeError::custom("expected MessageComponentInteractionData struct")
+                    })?;
+                let message = message.ok_or_else(|| DeError::missing_field("message"))?;
+
+                let guild_id = guild_id.unwrap_or_default();
+                let member = member.unwrap_or_default();
+                let user = user.unwrap_or_default();
+
+                Self::Value::MessageComponent(Box::new(MessageComponentInteraction {
+                    application_id,
+                    channel_id,
+                    data,
+                    guild_id,
+                    id,
+                    kind,
+                    member,
+                    message,
                     token,
                     user,
                 }))

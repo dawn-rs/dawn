@@ -2,7 +2,7 @@ use super::RequestReactionType;
 use crate::{
     client::Client,
     error::Error as HttpError,
-    request::{validate, Pending, Request},
+    request::{validate_inner, Pending, Request},
     routing::Route,
 };
 use std::{
@@ -115,7 +115,7 @@ impl<'a> GetReactions<'a> {
     /// Returns a [`GetReactionsErrorType::LimitInvalid`] error type if the
     /// amount is greater than 100.
     pub fn limit(mut self, limit: u64) -> Result<Self, GetReactionsError> {
-        if !validate::get_reactions_limit(limit) {
+        if !validate_inner::get_reactions_limit(limit) {
             return Err(GetReactionsError {
                 kind: GetReactionsErrorType::LimitInvalid { limit },
             });

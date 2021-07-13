@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
     error::Error as HttpError,
-    request::{validate, Pending, Request},
+    request::{validate_inner, Pending, Request},
     routing::Route,
 };
 use serde::Serialize;
@@ -124,7 +124,7 @@ impl<'a> UpdateTemplate<'a> {
     }
 
     fn _description(mut self, description: String) -> Result<Self, UpdateTemplateError> {
-        if !validate::template_description(&description) {
+        if !validate_inner::template_description(&description) {
             return Err(UpdateTemplateError {
                 kind: UpdateTemplateErrorType::DescriptionTooLarge { description },
             });
@@ -148,7 +148,7 @@ impl<'a> UpdateTemplate<'a> {
     }
 
     fn _name(mut self, name: String) -> Result<Self, UpdateTemplateError> {
-        if !validate::template_name(&name) {
+        if !validate_inner::template_name(&name) {
             return Err(UpdateTemplateError {
                 kind: UpdateTemplateErrorType::NameInvalid { name },
             });

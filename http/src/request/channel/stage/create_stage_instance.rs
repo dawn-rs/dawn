@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
     error::Error as HttpError,
-    request::{validate, Pending, Request},
+    request::{validate_inner, Pending, Request},
     routing::Route,
 };
 use serde::Serialize;
@@ -99,7 +99,7 @@ impl<'a> CreateStageInstance<'a> {
         channel_id: ChannelId,
         topic: String,
     ) -> Result<Self, CreateStageInstanceError> {
-        if !validate::stage_topic(&topic) {
+        if !validate_inner::stage_topic(&topic) {
             return Err(CreateStageInstanceError {
                 kind: CreateStageInstanceErrorType::InvalidTopic { topic },
                 source: None,

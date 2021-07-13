@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
     error::Error as HttpError,
-    request::{validate, Pending, Request},
+    request::{validate_inner, Pending, Request},
     routing::Route,
 };
 use std::{
@@ -139,7 +139,7 @@ impl<'a> GetCurrentUserGuilds<'a> {
     ///
     /// [the discord docs]: https://discordapp.com/developers/docs/resources/user#get-current-user-guilds-query-string-params
     pub fn limit(mut self, limit: u64) -> Result<Self, GetCurrentUserGuildsError> {
-        if !validate::get_current_user_guilds_limit(limit) {
+        if !validate_inner::get_current_user_guilds_limit(limit) {
             return Err(GetCurrentUserGuildsError {
                 kind: GetCurrentUserGuildsErrorType::LimitInvalid { limit },
             });

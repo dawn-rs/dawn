@@ -2,7 +2,7 @@ use crate::{
     client::Client,
     error::Error as HttpError,
     request::{
-        self, validate, AuditLogReason, AuditLogReasonError, NullableField, Pending, Request,
+        self, validate_inner, AuditLogReason, AuditLogReasonError, NullableField, Pending, Request,
     },
     routing::Route,
 };
@@ -153,7 +153,7 @@ impl<'a> UpdateChannel<'a> {
     }
 
     fn _name(mut self, name: String) -> Result<Self, UpdateChannelError> {
-        if !validate::channel_name(&name) {
+        if !validate_inner::channel_name(&name) {
             return Err(UpdateChannelError {
                 kind: UpdateChannelErrorType::NameInvalid { name },
             });

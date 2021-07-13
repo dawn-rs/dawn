@@ -2,7 +2,9 @@ use crate::{
     client::Client,
     error::Error as HttpError,
     request::{
-        validate::{self, EmbedValidationError},
+        validate_inner::{
+            self, ComponentValidationError, ComponentValidationErrorType, EmbedValidationError,
+        },
         NullableField, Pending, Request,
     },
     routing::Route,
@@ -13,6 +15,7 @@ use std::{
     fmt::{Display, Formatter, Result as FmtResult},
 };
 use twilight_model::{
+    application::component::Component,
     channel::{
         embed::Embed,
         message::{AllowedMentions, MessageFlags},
@@ -61,6 +64,16 @@ impl UpdateMessageError {
 impl Display for UpdateMessageError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match &self.kind {
+            UpdateMessageErrorType::ComponentCount { count } => {
+                Display::fmt(count, f)?;
+                f.write_str(" components were provided, but only ")?;
+                Display::fmt(&ComponentValidationError::COMPONENT_COUNT, f)?;
+
+                f.write_str(" root components are allowed")
+            }
+            UpdateMessageErrorType::ComponentInvalid { .. } => {
+                f.write_str("a provided component is invalid")
+            }
             UpdateMessageErrorType::ContentInvalid { .. } => {
                 f.write_str("the message content is invalid")
             }
@@ -90,6 +103,16 @@ impl Error for UpdateMessageError {
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum UpdateMessageErrorType {
+    /// Too many message components were provided.
+    ComponentCount {
+        /// Number of components that were provided.
+        count: usize,
+    },
+    /// An invalid message component was provided.
+    ComponentInvalid {
+        /// Additional details about the validation failure type.
+        kind: ComponentValidationErrorType,
+    },
     /// Returned when the content is over 2000 UTF-16 characters.
     ContentInvalid {
         /// Provided content.
@@ -110,6 +133,8 @@ struct UpdateMessageFields {
     pub(crate) allowed_mentions: Option<AllowedMentions>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub attachments: Vec<Attachment>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub components: Option<NullableField<Vec<Component>>>,
     // We don't serialize if this is Option::None, to avoid overwriting the
     // field without meaning to.
     //
@@ -205,6 +230,47 @@ impl<'a> UpdateMessage<'a> {
         self
     }
 
+    /// Add multiple [`Component`]s to a message.
+    ///
+    /// Calling this method multiple times will clear previous calls.
+    ///
+    /// Pass `None` to clear existing components.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`UpdateMessageErrorType::ComponentCount`] error type if
+    /// too many components are provided.
+    ///
+    /// Returns an [`UpdateMessageErrorType::ComponentInvalid`] error type if
+    /// one of the provided components is invalid.
+    pub fn components(
+        mut self,
+        components: Option<Vec<Component>>,
+    ) -> Result<Self, UpdateMessageError> {
+        if let Some(components) = components.as_ref() {
+            validate_inner::components(&components).map_err(|source| {
+                let (kind, inner_source) = source.into_parts();
+
+                match kind {
+                    ComponentValidationErrorType::ComponentCount { count } => UpdateMessageError {
+                        kind: UpdateMessageErrorType::ComponentCount { count },
+                        source: inner_source,
+                    },
+                    other => UpdateMessageError {
+                        kind: UpdateMessageErrorType::ComponentInvalid { kind: other },
+                        source: inner_source,
+                    },
+                }
+            })?;
+        }
+
+        self.fields
+            .components
+            .replace(NullableField::from_option(components));
+
+        Ok(self)
+    }
+
     /// Set the content of the message.
     ///
     /// Pass `None` if you want to remove the message content.
@@ -224,7 +290,7 @@ impl<'a> UpdateMessage<'a> {
 
     fn _content(mut self, content: Option<String>) -> Result<Self, UpdateMessageError> {
         if let Some(content_ref) = content.as_ref() {
-            if !validate::content_limit(content_ref) {
+            if !validate_inner::content_limit(content_ref) {
                 return Err(UpdateMessageError {
                     kind: UpdateMessageErrorType::ContentInvalid {
                         content: content.expect("content is known to be some"),
@@ -263,7 +329,7 @@ impl<'a> UpdateMessage<'a> {
 
     fn _embed(mut self, embed: Option<Embed>) -> Result<Self, UpdateMessageError> {
         if let Some(embed_ref) = embed.as_ref() {
-            validate::embed(&embed_ref)
+            validate_inner::embed(&embed_ref)
                 .map_err(|source| UpdateMessageError::embed(source, embed_ref.clone(), None))?;
         }
 
@@ -303,7 +369,7 @@ impl<'a> UpdateMessage<'a> {
         embeds: impl IntoIterator<Item = Embed>,
     ) -> Result<Self, UpdateMessageError> {
         for (idx, embed) in embeds.into_iter().enumerate() {
-            validate::embed(&embed)
+            validate_inner::embed(&embed)
                 .map_err(|source| UpdateMessageError::embed(source, embed.clone(), Some(idx)))?;
 
             if let Some(embeds) = &mut self.fields.embeds {

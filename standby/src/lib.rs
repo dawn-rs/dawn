@@ -911,6 +911,7 @@ mod tests {
                 verified: None,
             },
             channel_id: ChannelId(1),
+            components: Vec::new(),
             content: "test".to_owned(),
             edited_timestamp: None,
             embeds: Vec::new(),

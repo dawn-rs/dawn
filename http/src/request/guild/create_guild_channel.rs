@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
     error::Error as HttpError,
-    request::{self, validate, AuditLogReason, AuditLogReasonError, Pending, Request},
+    request::{self, validate_inner, AuditLogReason, AuditLogReasonError, Pending, Request},
     routing::Route,
 };
 use serde::Serialize;
@@ -133,7 +133,7 @@ impl<'a> CreateGuildChannel<'a> {
         guild_id: GuildId,
         name: String,
     ) -> Result<Self, CreateGuildChannelError> {
-        if !validate::channel_name(&name) {
+        if !validate_inner::channel_name(&name) {
             return Err(CreateGuildChannelError {
                 kind: CreateGuildChannelErrorType::NameInvalid { name },
             });

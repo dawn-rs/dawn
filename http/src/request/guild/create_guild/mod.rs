@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
     error::Error as HttpError,
-    request::{validate, Pending, Request},
+    request::{validate_inner, Pending, Request},
     routing::Route,
 };
 use serde::Serialize;
@@ -248,7 +248,7 @@ impl<'a> CreateGuild<'a> {
     }
 
     fn _new(http: &'a Client, name: String) -> Result<Self, CreateGuildError> {
-        if !validate::guild_name(&name) {
+        if !validate_inner::guild_name(&name) {
             return Err(CreateGuildError {
                 kind: CreateGuildErrorType::NameInvalid { name },
             });

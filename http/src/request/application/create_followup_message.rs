@@ -1,11 +1,19 @@
 use crate::{
     client::Client,
-    error::Error,
-    request::{Form, Pending, Request},
+    error::Error as HttpError,
+    request::{
+        validate::{ComponentValidationError, ComponentValidationErrorType},
+        validate_inner, Form, Pending, Request,
+    },
     routing::Route,
 };
 use serde::Serialize;
+use std::{
+    error::Error,
+    fmt::{Display, Formatter, Result as FmtResult},
+};
 use twilight_model::{
+    application::component::Component,
     channel::{
         embed::Embed,
         message::{AllowedMentions, MessageFlags},
@@ -14,10 +22,85 @@ use twilight_model::{
     id::ApplicationId,
 };
 
+/// A followup message can not be created as configured.
+#[derive(Debug)]
+pub struct CreateFollowupMessageError {
+    kind: CreateFollowupMessageErrorType,
+    source: Option<Box<dyn Error + Send + Sync>>,
+}
+
+impl CreateFollowupMessageError {
+    /// Immutable reference to the type of error that occurred.
+    #[must_use = "retrieving the type has no effect if left unused"]
+    pub const fn kind(&self) -> &CreateFollowupMessageErrorType {
+        &self.kind
+    }
+
+    /// Consume the error, returning the source error if there is any.
+    #[must_use = "consuming the error and retrieving the source has no effect if left unused"]
+    pub fn into_source(self) -> Option<Box<dyn Error + Send + Sync>> {
+        self.source
+    }
+
+    /// Consume the error, returning the owned error type and the source error.
+    #[must_use = "consuming the error into its parts has no effect if left unused"]
+    pub fn into_parts(
+        self,
+    ) -> (
+        CreateFollowupMessageErrorType,
+        Option<Box<dyn Error + Send + Sync>>,
+    ) {
+        (self.kind, self.source)
+    }
+}
+
+impl Display for CreateFollowupMessageError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        match &self.kind {
+            CreateFollowupMessageErrorType::ComponentCount { count } => {
+                Display::fmt(count, f)?;
+                f.write_str(" components were provided, but only ")?;
+                Display::fmt(&ComponentValidationError::COMPONENT_COUNT, f)?;
+
+                f.write_str(" root components are allowed")
+            }
+            CreateFollowupMessageErrorType::ComponentInvalid { .. } => {
+                f.write_str("a provided component is invalid")
+            }
+        }
+    }
+}
+
+impl Error for CreateFollowupMessageError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.source
+            .as_ref()
+            .map(|source| &**source as &(dyn Error + 'static))
+    }
+}
+
+/// Type of [`CreateFollowupMessageError`] that occurred.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum CreateFollowupMessageErrorType {
+    /// An invalid message component was provided.
+    ComponentInvalid {
+        /// Additional details about the validation failure type.
+        kind: ComponentValidationErrorType,
+    },
+    /// Too many message components were provided.
+    ComponentCount {
+        /// Number of components that were provided.
+        count: usize,
+    },
+}
+
 #[derive(Default, Serialize)]
 pub(crate) struct CreateFollowupMessageFields {
     #[serde(skip_serializing_if = "Option::is_none")]
     avatar_url: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    components: Vec<Component>,
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -95,6 +178,43 @@ impl<'a> CreateFollowupMessage<'a> {
         self.fields.avatar_url.replace(avatar_url.into());
 
         self
+    }
+
+    /// Add multiple [`Component`]s to a message.
+    ///
+    /// Calling this method multiple times will clear previous calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`CreateFollowupMessageErrorType::ComponentCount`] error type
+    /// if too many components are provided.
+    ///
+    /// Returns an [`CreateFollowupMessageErrorType::ComponentInvalid`] error
+    /// type if one of the provided components is invalid.
+    pub fn components(
+        mut self,
+        components: Vec<Component>,
+    ) -> Result<Self, CreateFollowupMessageError> {
+        validate_inner::components(&components).map_err(|source| {
+            let (kind, inner_source) = source.into_parts();
+
+            match kind {
+                ComponentValidationErrorType::ComponentCount { count } => {
+                    CreateFollowupMessageError {
+                        kind: CreateFollowupMessageErrorType::ComponentCount { count },
+                        source: inner_source,
+                    }
+                }
+                other => CreateFollowupMessageError {
+                    kind: CreateFollowupMessageErrorType::ComponentInvalid { kind: other },
+                    source: inner_source,
+                },
+            }
+        })?;
+
+        self.fields.components = components;
+
+        Ok(self)
     }
 
     /// The content of the webook's message.
@@ -219,7 +339,7 @@ impl<'a> CreateFollowupMessage<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    fn start(&mut self) -> Result<(), HttpError> {
         let mut request = Request::builder(Route::ExecuteWebhook {
             token: self.token.clone(),
             wait: None,
@@ -236,7 +356,7 @@ impl<'a> CreateFollowupMessage<'a> {
             if let Some(payload_json) = &self.fields.payload_json {
                 form.payload_json(&payload_json);
             } else {
-                let body = crate::json::to_vec(&self.fields).map_err(Error::json)?;
+                let body = crate::json::to_vec(&self.fields).map_err(HttpError::json)?;
                 form.payload_json(&body);
             }
 

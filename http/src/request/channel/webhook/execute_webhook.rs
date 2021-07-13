@@ -1,20 +1,99 @@
 use crate::{
     client::Client,
-    error::{Error, ErrorType},
-    request::{Form, PendingOption, Request},
+    error::{Error as HttpError, ErrorType},
+    request::{
+        validate_inner::{self, ComponentValidationError, ComponentValidationErrorType},
+        Form, PendingOption, Request,
+    },
     routing::Route,
 };
 use hyper::StatusCode;
 use serde::Serialize;
 use std::{
+    error::Error,
+    fmt::{Display, Formatter, Result as FmtResult},
     future::Future,
     pin::Pin,
     task::{Context, Poll},
 };
 use twilight_model::{
+    application::component::Component,
     channel::{embed::Embed, message::AllowedMentions, Message},
     id::WebhookId,
 };
+
+/// A webhook could not be executed.
+#[derive(Debug)]
+pub struct ExecuteWebhookError {
+    kind: ExecuteWebhookErrorType,
+    source: Option<Box<dyn Error + Send + Sync>>,
+}
+
+impl ExecuteWebhookError {
+    /// Immutable reference to the type of error that occurred.
+    #[must_use = "retrieving the type has no effect if left unused"]
+    pub const fn kind(&self) -> &ExecuteWebhookErrorType {
+        &self.kind
+    }
+
+    /// Consume the error, returning the source error if there is any.
+    #[must_use = "consuming the error and retrieving the source has no effect if left unused"]
+    pub fn into_source(self) -> Option<Box<dyn Error + Send + Sync>> {
+        self.source
+    }
+
+    /// Consume the error, returning the owned error type and the source error.
+    #[must_use = "consuming the error into its parts has no effect if left unused"]
+    pub fn into_parts(
+        self,
+    ) -> (
+        ExecuteWebhookErrorType,
+        Option<Box<dyn Error + Send + Sync>>,
+    ) {
+        (self.kind, self.source)
+    }
+}
+
+impl Display for ExecuteWebhookError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        match &self.kind {
+            ExecuteWebhookErrorType::ComponentCount { count } => {
+                Display::fmt(count, f)?;
+                f.write_str(" components were provided, but only ")?;
+                Display::fmt(&ComponentValidationError::COMPONENT_COUNT, f)?;
+
+                f.write_str(" root components are allowed")
+            }
+            ExecuteWebhookErrorType::ComponentInvalid { .. } => {
+                f.write_str("a provided component is invalid")
+            }
+        }
+    }
+}
+
+impl Error for ExecuteWebhookError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.source
+            .as_ref()
+            .map(|source| &**source as &(dyn Error + 'static))
+    }
+}
+
+/// Type of [`ExecuteWebhookError`] that occurred.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum ExecuteWebhookErrorType {
+    /// Too many message components were provided.
+    ComponentCount {
+        /// Number of components that were provided.
+        count: usize,
+    },
+    /// An invalid message component was provided.
+    ComponentInvalid {
+        /// Additional details about the validation failure type.
+        kind: ComponentValidationErrorType,
+    },
+}
 
 #[derive(Default, Serialize)]
 pub(crate) struct ExecuteWebhookFields {
@@ -22,6 +101,8 @@ pub(crate) struct ExecuteWebhookFields {
     avatar_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    components: Vec<Component>,
     #[serde(skip_serializing_if = "Option::is_none")]
     embeds: Option<Vec<Embed>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -94,6 +175,38 @@ impl<'a> ExecuteWebhook<'a> {
         self.fields.avatar_url.replace(avatar_url.into());
 
         self
+    }
+
+    /// Add multiple [`Component`]s to a message.
+    ///
+    /// Calling this method multiple times will clear previous calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`ExecuteWebhookErrorType::ComponentCount`] error
+    /// type if too many components are provided.
+    ///
+    /// Returns an [`ExecuteWebhookErrorType::ComponentInvalid`] error
+    /// type if one of the provided components is invalid.
+    pub fn components(mut self, components: Vec<Component>) -> Result<Self, ExecuteWebhookError> {
+        validate_inner::components(&components).map_err(|source| {
+            let (kind, inner_source) = source.into_parts();
+
+            match kind {
+                ComponentValidationErrorType::ComponentCount { count } => ExecuteWebhookError {
+                    kind: ExecuteWebhookErrorType::ComponentCount { count },
+                    source: inner_source,
+                },
+                other => ExecuteWebhookError {
+                    kind: ExecuteWebhookErrorType::ComponentInvalid { kind: other },
+                    source: inner_source,
+                },
+            }
+        })?;
+
+        self.fields.components = components;
+
+        Ok(self)
     }
 
     /// The content of the webook's message.
@@ -213,7 +326,7 @@ impl<'a> ExecuteWebhook<'a> {
         self
     }
 
-    fn start(&mut self) -> Result<(), Error> {
+    fn start(&mut self) -> Result<(), HttpError> {
         let mut request = Request::builder(Route::ExecuteWebhook {
             token: self.token.clone(),
             wait: self.fields.wait,
@@ -234,7 +347,7 @@ impl<'a> ExecuteWebhook<'a> {
             if let Some(payload_json) = &self.fields.payload_json {
                 form.payload_json(&payload_json);
             } else {
-                let body = crate::json::to_vec(&self.fields).map_err(Error::json)?;
+                let body = crate::json::to_vec(&self.fields).map_err(HttpError::json)?;
                 form.payload_json(&body);
             }
 
@@ -251,14 +364,14 @@ impl<'a> ExecuteWebhook<'a> {
 }
 
 impl Future for ExecuteWebhook<'_> {
-    type Output = Result<Option<Message>, Error>;
+    type Output = Result<Option<Message>, HttpError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         loop {
             if let Some(fut) = self.as_mut().fut.as_mut() {
                 let bytes = match fut.as_mut().poll(cx) {
                     Poll::Ready(Ok(bytes)) => bytes,
-                    Poll::Ready(Err(Error {
+                    Poll::Ready(Err(HttpError {
                         kind: ErrorType::Response { status, .. },
                         source: None,
                     })) if status == StatusCode::NOT_FOUND => {

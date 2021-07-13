@@ -3,7 +3,7 @@ use crate::{
     error::Error,
     request::{
         application::{InteractionError, InteractionErrorType},
-        validate, Pending, Request,
+        validate_inner, Pending, Request,
     },
     routing::Route,
 };
@@ -58,7 +58,7 @@ impl<'a> SetCommandPermissions<'a> {
                 acc
             })
             .iter()
-            .all(|permission| validate::command_permissions(*permission.1))
+            .all(|permission| validate_inner::command_permissions(*permission.1))
         {
             return Err(InteractionError {
                 kind: InteractionErrorType::TooManyCommandPermissions,

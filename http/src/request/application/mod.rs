@@ -1,4 +1,5 @@
-mod create_followup_message;
+pub mod create_followup_message;
+
 mod create_global_command;
 mod create_guild_command;
 mod delete_followup_message;

@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
     error::Error as HttpError,
-    request::{self, validate, AuditLogReason, AuditLogReasonError, Pending, Request},
+    request::{self, validate_inner, AuditLogReason, AuditLogReasonError, Pending, Request},
     routing::Route,
 };
 use std::{
@@ -121,7 +121,7 @@ impl<'a> CreateGuildPrune<'a> {
     /// Returns a [`CreateGuildPruneErrorType::DaysInvalid`] error type if the
     /// number of days is 0.
     pub fn days(mut self, days: u64) -> Result<Self, CreateGuildPruneError> {
-        if !validate::guild_prune_days(days) {
+        if !validate_inner::guild_prune_days(days) {
             return Err(CreateGuildPruneError {
                 kind: CreateGuildPruneErrorType::DaysInvalid,
             });

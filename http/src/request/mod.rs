@@ -55,6 +55,13 @@ macro_rules! poll_req {
     };
 }
 
+/// Types for validating request parameters.
+pub mod validate {
+    // Exposed so request error types can expose information about the inner
+    // validation error type.
+    pub use super::validate_inner::{ComponentValidationError, ComponentValidationErrorType};
+}
+
 pub mod application;
 pub mod channel;
 pub mod guild;
@@ -69,7 +76,13 @@ mod get_gateway_authed;
 mod get_user_application;
 mod get_voice_regions;
 mod multipart;
-mod validate;
+
+// Rename this module so we can expose a select amount of validation types.
+//
+// Work to prepare the validation module will need to be done individually, so
+// for now only a select number of types are exposed until prepared.
+#[path = "validate.rs"]
+mod validate_inner;
 
 pub use self::{
     audit_reason::{AuditLogReason, AuditLogReasonError},

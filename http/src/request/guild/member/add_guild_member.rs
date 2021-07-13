@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
     error::Error as HttpError,
-    request::{validate, PendingOption, Request},
+    request::{validate_inner, PendingOption, Request},
     routing::Route,
 };
 use serde::Serialize;
@@ -151,7 +151,7 @@ impl<'a> AddGuildMember<'a> {
     }
 
     fn _nick(mut self, nick: String) -> Result<Self, AddGuildMemberError> {
-        if !validate::nickname(&nick) {
+        if !validate_inner::nickname(&nick) {
             return Err(AddGuildMemberError {
                 kind: AddGuildMemberErrorType::NicknameInvalid { nickname: nick },
             });

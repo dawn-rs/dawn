@@ -3,7 +3,7 @@ use crate::{
     error::Error,
     request::{
         application::{InteractionError, InteractionErrorType},
-        validate, Pending, Request,
+        validate_inner, Pending, Request,
     },
     routing::Route,
 };
@@ -41,7 +41,7 @@ impl<'a> UpdateCommandPermissions<'a> {
         command_id: CommandId,
         permissions: Vec<CommandPermissions>,
     ) -> Result<Self, InteractionError> {
-        if !validate::command_permissions(permissions.len()) {
+        if !validate_inner::command_permissions(permissions.len()) {
             return Err(InteractionError {
                 kind: InteractionErrorType::TooManyCommandPermissions,
             });

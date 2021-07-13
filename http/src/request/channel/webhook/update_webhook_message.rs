@@ -4,7 +4,9 @@ use crate::{
     client::Client,
     error::Error as HttpError,
     request::{
-        self, validate, AuditLogReason, AuditLogReasonError, Form, NullableField, Pending, Request,
+        self,
+        validate_inner::{self, ComponentValidationError, ComponentValidationErrorType},
+        AuditLogReason, AuditLogReasonError, Form, NullableField, Pending, Request,
     },
     routing::Route,
 };
@@ -14,6 +16,7 @@ use std::{
     fmt::{Display, Formatter, Result as FmtResult},
 };
 use twilight_model::{
+    application::component::Component,
     channel::{embed::Embed, message::AllowedMentions, Attachment},
     id::{MessageId, WebhookId},
 };
@@ -53,6 +56,16 @@ impl UpdateWebhookMessageError {
 impl Display for UpdateWebhookMessageError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match &self.kind {
+            UpdateWebhookMessageErrorType::ComponentCount { count } => {
+                Display::fmt(count, f)?;
+                f.write_str(" components were provided, but only ")?;
+                Display::fmt(&ComponentValidationError::COMPONENT_COUNT, f)?;
+
+                f.write_str(" root components are allowed")
+            }
+            UpdateWebhookMessageErrorType::ComponentInvalid { .. } => {
+                f.write_str("a provided component is invalid")
+            }
             UpdateWebhookMessageErrorType::ContentInvalid { .. } => {
                 f.write_str("message content is invalid")
             }
@@ -96,6 +109,16 @@ pub enum UpdateWebhookMessageErrorType {
         /// [`embeds`]: Self::EmbedTooLarge.embeds
         index: usize,
     },
+    /// An invalid message component was provided.
+    ComponentInvalid {
+        /// Additional details about the validation failure type.
+        kind: ComponentValidationErrorType,
+    },
+    /// Too many message components were provided.
+    ComponentCount {
+        /// Number of components that were provided.
+        count: usize,
+    },
     /// Too many embeds were provided.
     ///
     /// A webhook can have up to 10 embeds.
@@ -111,6 +134,8 @@ struct UpdateWebhookMessageFields {
     allowed_mentions: Option<AllowedMentions>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     attachments: Vec<Attachment>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    components: Option<NullableField<Vec<Component>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<NullableField<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -216,6 +241,49 @@ impl<'a> UpdateWebhookMessage<'a> {
         self
     }
 
+    /// Add multiple [`Component`]s to a message.
+    ///
+    /// Calling this method multiple times will clear previous calls.
+    ///
+    /// Pass `None` to clear existing components.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`UpdateWebhookMessageErrorType::ComponentCount`] error
+    /// type if too many components are provided.
+    ///
+    /// Returns an [`UpdateWebhookMessageErrorType::ComponentInvalid`] error
+    /// type if one of the provided components is invalid.
+    pub fn components(
+        mut self,
+        components: Option<Vec<Component>>,
+    ) -> Result<Self, UpdateWebhookMessageError> {
+        if let Some(components) = components.as_ref() {
+            validate_inner::components(&components).map_err(|source| {
+                let (kind, inner_source) = source.into_parts();
+
+                match kind {
+                    ComponentValidationErrorType::ComponentCount { count } => {
+                        UpdateWebhookMessageError {
+                            kind: UpdateWebhookMessageErrorType::ComponentCount { count },
+                            source: inner_source,
+                        }
+                    }
+                    other => UpdateWebhookMessageError {
+                        kind: UpdateWebhookMessageErrorType::ComponentInvalid { kind: other },
+                        source: inner_source,
+                    },
+                }
+            })?;
+        }
+
+        self.fields
+            .components
+            .replace(NullableField::from_option(components));
+
+        Ok(self)
+    }
+
     /// Set the content of the message.
     ///
     /// Pass `None` if you want to remove the message content.
@@ -231,7 +299,7 @@ impl<'a> UpdateWebhookMessage<'a> {
     /// the content length is too long.
     pub fn content(mut self, content: Option<String>) -> Result<Self, UpdateWebhookMessageError> {
         if let Some(content_ref) = content.as_ref() {
-            if !validate::content_limit(content_ref) {
+            if !validate_inner::content_limit(content_ref) {
                 return Err(UpdateWebhookMessageError {
                     kind: UpdateWebhookMessageErrorType::ContentInvalid {
                         content: content.expect("content is known to be some"),
@@ -306,7 +374,7 @@ impl<'a> UpdateWebhookMessage<'a> {
             }
 
             for (idx, embed) in embeds_present.iter().enumerate() {
-                if let Err(source) = validate::embed(&embed) {
+                if let Err(source) = validate_inner::embed(&embed) {
                     return Err(UpdateWebhookMessageError {
                         kind: UpdateWebhookMessageErrorType::EmbedTooLarge {
                             embeds: embeds.expect("embeds are known to be present"),
@@ -437,6 +505,7 @@ mod tests {
         let body = UpdateWebhookMessageFields {
             allowed_mentions: None,
             attachments: Vec::new(),
+            components: None,
             content: Some(NullableField::Value("test".to_owned())),
             embeds: None,
             payload_json: None,

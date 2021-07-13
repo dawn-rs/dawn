@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
     error::Error as HttpError,
-    request::{validate, Pending, Request},
+    request::{validate_inner, Pending, Request},
     routing::Route,
 };
 use std::{
@@ -128,7 +128,7 @@ impl<'a> GetAuditLog<'a> {
     /// Returns a [`GetAuditLogErrorType::LimitInvalid`] error type if the
     /// `limit` is 0 or greater than 100.
     pub fn limit(mut self, limit: u64) -> Result<Self, GetAuditLogError> {
-        if !validate::get_audit_log_limit(limit) {
+        if !validate_inner::get_audit_log_limit(limit) {
             return Err(GetAuditLogError {
                 kind: GetAuditLogErrorType::LimitInvalid { limit },
             });

@@ -15,4 +15,4 @@ pub use self::{
     get_channel_messages_configured::GetChannelMessagesConfigured, get_message::GetMessage,
     update_message::UpdateMessage,
 };
-pub use super::super::validate::EmbedValidationError;
+pub use super::super::validate_inner::EmbedValidationError;

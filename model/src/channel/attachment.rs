@@ -1,7 +1,7 @@
 use crate::id::AttachmentId;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Attachment {
     /// Attachment's [media type].
     ///

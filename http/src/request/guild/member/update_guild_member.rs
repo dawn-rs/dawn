@@ -2,7 +2,7 @@ use crate::{
     client::Client,
     error::Error as HttpError,
     request::{
-        self, validate, AuditLogReason, AuditLogReasonError, NullableField, Pending, Request,
+        self, validate_inner, AuditLogReason, AuditLogReasonError, NullableField, Pending, Request,
     },
     routing::Route,
 };
@@ -155,7 +155,7 @@ impl<'a> UpdateGuildMember<'a> {
 
     fn _nick(mut self, nick: Option<String>) -> Result<Self, UpdateGuildMemberError> {
         if let Some(nick) = nick {
-            if !validate::nickname(&nick) {
+            if !validate_inner::nickname(&nick) {
                 return Err(UpdateGuildMemberError {
                     kind: UpdateGuildMemberErrorType::NicknameInvalid { nickname: nick },
                 });

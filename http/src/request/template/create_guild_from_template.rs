@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
     error::Error as HttpError,
-    request::{validate, Pending, Request},
+    request::{validate_inner, Pending, Request},
     routing::Route,
 };
 use serde::Serialize;
@@ -101,7 +101,7 @@ impl<'a> CreateGuildFromTemplate<'a> {
         template_code: String,
         name: String,
     ) -> Result<Self, CreateGuildFromTemplateError> {
-        if !validate::guild_name(&name) {
+        if !validate_inner::guild_name(&name) {
             return Err(CreateGuildFromTemplateError {
                 kind: CreateGuildFromTemplateErrorType::NameInvalid { name },
             });

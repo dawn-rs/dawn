@@ -3,7 +3,7 @@ use crate::{
     error::Error as HttpError,
     request::{
         application::{InteractionError, InteractionErrorType},
-        validate, Pending, Request,
+        validate_inner, Pending, Request,
     },
     routing::Route,
 };
@@ -38,12 +38,12 @@ impl<'a> CreateGlobalCommand<'a> {
         let name = name.into();
         let description = description.into();
 
-        if !validate::command_name(&name) {
+        if !validate_inner::command_name(&name) {
             return Err(InteractionError {
                 kind: InteractionErrorType::CommandNameValidationFailed { name },
             });
         }
-        if !validate::command_description(&description) {
+        if !validate_inner::command_description(&description) {
             return Err(InteractionError {
                 kind: InteractionErrorType::CommandDescriptionValidationFailed { description },
             });

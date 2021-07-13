@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
     error::Error as HttpError,
-    request::{validate, NullableField, Pending, Request},
+    request::{validate_inner, NullableField, Pending, Request},
     routing::Route,
 };
 use serde::Serialize;
@@ -122,7 +122,7 @@ impl<'a> UpdateCurrentUser<'a> {
     }
 
     fn _username(mut self, username: String) -> Result<Self, UpdateCurrentUserError> {
-        if !validate::username(&username) {
+        if !validate_inner::username(&username) {
             return Err(UpdateCurrentUserError {
                 kind: UpdateCurrentUserErrorType::UsernameInvalid { username },
             });

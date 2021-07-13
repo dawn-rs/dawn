@@ -25,9 +25,37 @@ pub enum InteractionResponse {
     ChannelMessageWithSource(CallbackData),
     /// Acknowledges an interaction, showing a loading state.
     DeferredChannelMessageWithSource(CallbackData),
+    /// Acknowledge an interaction and edit the original message later.
+    ///
+    /// This is only valid for components.
+    DeferredUpdateMessage,
+    /// Edit the message a component is attached to.
+    UpdateMessage(CallbackData),
 }
 
 impl InteractionResponse {
+    /// Type of response this is.
+    ///
+    /// # Examples
+    ///
+    /// Check the types of the [`DeferredUpdateMessage`] and [`Pong`]
+    /// interaction response variants.
+    ///
+    /// ```
+    /// use twilight_model::application::callback::{
+    ///     InteractionResponse,
+    ///     ResponseType,
+    /// };
+    ///
+    /// assert_eq!(
+    ///     ResponseType::DeferredUpdateMessage,
+    ///     InteractionResponse::DeferredUpdateMessage.kind(),
+    /// );
+    /// assert_eq!(ResponseType::Pong, InteractionResponse::Pong.kind());
+    /// ```
+    ///
+    /// [`DeferredUpdateMessage`]: Self::DeferredUpdateMessage
+    /// [`Pong`]: Self::Pong
     pub const fn kind(&self) -> ResponseType {
         match self {
             Self::Pong => ResponseType::Pong,
@@ -35,6 +63,8 @@ impl InteractionResponse {
             Self::DeferredChannelMessageWithSource(_) => {
                 ResponseType::DeferredChannelMessageWithSource
             }
+            Self::DeferredUpdateMessage => ResponseType::DeferredUpdateMessage,
+            Self::UpdateMessage(_) => ResponseType::UpdateMessage,
         }
     }
 }
@@ -120,6 +150,12 @@ impl<'de> Visitor<'de> for ResponseVisitor {
 
                 Self::Value::DeferredChannelMessageWithSource(data)
             }
+            ResponseType::DeferredUpdateMessage => Self::Value::DeferredUpdateMessage,
+            ResponseType::UpdateMessage => {
+                let data = data.ok_or_else(|| DeError::missing_field("data"))?;
+
+                Self::Value::UpdateMessage(data)
+            }
         })
     }
 }
@@ -127,14 +163,16 @@ impl<'de> Visitor<'de> for ResponseVisitor {
 impl Serialize for InteractionResponse {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
-            Self::Pong => {
+            Self::Pong | Self::DeferredUpdateMessage => {
                 let mut state = serializer.serialize_struct("InteractionResponse", 1)?;
 
                 state.serialize_field("type", &self.kind())?;
 
                 state.end()
             }
-            Self::ChannelMessageWithSource(data) | Self::DeferredChannelMessageWithSource(data) => {
+            Self::ChannelMessageWithSource(data)
+            | Self::DeferredChannelMessageWithSource(data)
+            | Self::UpdateMessage(data) => {
                 let mut state = serializer.serialize_struct("InteractionResponse", 2)?;
 
                 state.serialize_field("type", &self.kind())?;
@@ -150,13 +188,29 @@ impl Serialize for InteractionResponse {
 mod tests {
     use super::{CallbackData, InteractionResponse};
     use crate::channel::message::MessageFlags;
+    use serde::{Deserialize, Serialize};
     use serde_test::Token;
+    use static_assertions::assert_impl_all;
+    use std::{fmt::Debug, hash::Hash};
+
+    assert_impl_all!(
+        InteractionResponse: Clone,
+        Debug,
+        Deserialize<'static>,
+        Eq,
+        Hash,
+        PartialEq,
+        Send,
+        Serialize,
+        Sync
+    );
 
     #[test]
     fn test_response() {
         let value = InteractionResponse::ChannelMessageWithSource(CallbackData {
             allowed_mentions: None,
             content: Some("test".into()),
+            components: None,
             embeds: Vec::new(),
             flags: Some(MessageFlags::EPHEMERAL),
             tts: None,

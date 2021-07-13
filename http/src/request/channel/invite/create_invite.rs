@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
     error::Error as HttpError,
-    request::{self, validate, AuditLogReason, AuditLogReasonError, Pending, Request},
+    request::{self, validate_inner, AuditLogReason, AuditLogReasonError, Pending, Request},
     routing::Route,
 };
 use serde::Serialize;
@@ -152,7 +152,7 @@ impl<'a> CreateInvite<'a> {
     /// # Ok(()) }
     /// ```
     pub fn max_age(mut self, max_age: u64) -> Result<Self, CreateInviteError> {
-        if !validate::invite_max_age(max_age) {
+        if !validate_inner::invite_max_age(max_age) {
             return Err(CreateInviteError {
                 kind: CreateInviteErrorType::MaxAgeTooOld { provided: max_age },
             });
@@ -185,7 +185,7 @@ impl<'a> CreateInvite<'a> {
     /// # Ok(()) }
     /// ```
     pub fn max_uses(mut self, max_uses: u64) -> Result<Self, CreateInviteError> {
-        if !validate::invite_max_uses(max_uses) {
+        if !validate_inner::invite_max_uses(max_uses) {
             return Err(CreateInviteError {
                 kind: CreateInviteErrorType::MaxUsesTooLarge { provided: max_uses },
             });

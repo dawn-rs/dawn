@@ -35,6 +35,7 @@ pub fn cache_with_message_and_reactions() -> InMemoryCache {
             verified: None,
         },
         channel_id: ChannelId(2),
+        components: Vec::new(),
         content: "ping".to_owned(),
         edited_timestamp: None,
         embeds: Vec::new(),

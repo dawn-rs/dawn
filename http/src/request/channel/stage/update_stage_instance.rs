@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
     error::Error as HttpError,
-    request::{validate, Pending, Request},
+    request::{validate_inner, Pending, Request},
     routing::Route,
 };
 use serde::Serialize;
@@ -109,7 +109,7 @@ impl<'a> UpdateStageInstance<'a> {
     }
 
     fn _topic(mut self, topic: String) -> Result<Self, UpdateStageInstanceError> {
-        if !validate::stage_topic(&topic) {
+        if !validate_inner::stage_topic(&topic) {
             return Err(UpdateStageInstanceError {
                 kind: UpdateStageInstanceErrorType::InvalidTopic { topic },
                 source: None,
