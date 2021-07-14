@@ -51,7 +51,7 @@ impl ClusterBuilder {
 
         let token = token.into_boxed_str();
 
-        let http_client = Client::new(token.clone());
+        let http_client = Client::new(token.to_string());
 
         let shard_config =
             ShardBuilder::new(token.clone(), intents).http_client(http_client.clone());

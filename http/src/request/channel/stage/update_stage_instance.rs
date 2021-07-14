@@ -62,18 +62,15 @@ impl Error for UpdateStageInstanceError {
 #[derive(Debug)]
 pub enum UpdateStageInstanceErrorType {
     /// Topic is not between 1 and 120 characters in length.
-    InvalidTopic {
-        /// Invalid topic.
-        topic: String,
-    },
+    InvalidTopic,
 }
 
 #[derive(Default, Serialize)]
-struct UpdateStageInstanceFields {
+struct UpdateStageInstanceFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     privacy_level: Option<PrivacyLevel>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    topic: Option<String>,
+    topic: Option<&'a str>,
 }
 
 /// Update fields of an existing stage instance.
@@ -81,7 +78,7 @@ struct UpdateStageInstanceFields {
 /// Requires the user to be a moderator of the stage channel.
 pub struct UpdateStageInstance<'a> {
     channel_id: ChannelId,
-    fields: UpdateStageInstanceFields,
+    fields: UpdateStageInstanceFields<'a>,
     http: &'a Client,
 }
 
@@ -102,14 +99,10 @@ impl<'a> UpdateStageInstance<'a> {
     }
 
     /// Set the new topic of the instance.
-    pub fn topic(self, topic: impl Into<String>) -> Result<Self, UpdateStageInstanceError> {
-        self._topic(topic.into())
-    }
-
-    fn _topic(mut self, topic: String) -> Result<Self, UpdateStageInstanceError> {
+    pub fn topic(mut self, topic: &'a str) -> Result<Self, UpdateStageInstanceError> {
         if !validate::stage_topic(&topic) {
             return Err(UpdateStageInstanceError {
-                kind: UpdateStageInstanceErrorType::InvalidTopic { topic },
+                kind: UpdateStageInstanceErrorType::InvalidTopic,
                 source: None,
             });
         }

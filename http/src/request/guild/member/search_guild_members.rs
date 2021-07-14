@@ -63,8 +63,8 @@ pub enum SearchGuildMembersErrorType {
     },
 }
 
-struct SearchGuildMembersFields {
-    query: String,
+struct SearchGuildMembersFields<'a> {
+    query: &'a str,
     limit: Option<u64>,
 }
 
@@ -82,10 +82,10 @@ struct SearchGuildMembersFields {
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 ///
 /// let guild_id = GuildId(100);
-/// let members = client.search_guild_members(guild_id, String::from("Wumpus"))
+/// let members = client.search_guild_members(guild_id, "Wumpus")
 ///     .limit(10)?
 ///     .exec()
 ///     .await?;
@@ -99,17 +99,13 @@ struct SearchGuildMembersFields {
 ///
 /// [`GUILD_MEMBERS`]: twilight_model::gateway::Intents#GUILD_MEMBERS
 pub struct SearchGuildMembers<'a> {
-    fields: SearchGuildMembersFields,
+    fields: SearchGuildMembersFields<'a>,
     guild_id: GuildId,
     http: &'a Client,
 }
 
 impl<'a> SearchGuildMembers<'a> {
-    pub(crate) fn new(http: &'a Client, guild_id: GuildId, query: impl Into<String>) -> Self {
-        Self::_new(http, guild_id, query.into())
-    }
-
-    const fn _new(http: &'a Client, guild_id: GuildId, query: String) -> Self {
+    pub(crate) const fn new(http: &'a Client, guild_id: GuildId, query: &'a str) -> Self {
         Self {
             fields: SearchGuildMembersFields { query, limit: None },
             guild_id,

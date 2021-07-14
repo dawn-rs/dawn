@@ -10,21 +10,21 @@ use twilight_model::{application::callback::InteractionResponse, id::Interaction
 /// Respond to an interaction, by ID and token.
 pub struct InteractionCallback<'a> {
     interaction_id: InteractionId,
-    interaction_token: String,
+    interaction_token: &'a str,
     response: InteractionResponse,
     http: &'a Client,
 }
 
 impl<'a> InteractionCallback<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         http: &'a Client,
         interaction_id: InteractionId,
-        interaction_token: impl Into<String>,
+        interaction_token: &'a str,
         response: InteractionResponse,
     ) -> Self {
         Self {
             interaction_id,
-            interaction_token: interaction_token.into(),
+            interaction_token,
             response,
             http,
         }
@@ -32,7 +32,7 @@ impl<'a> InteractionCallback<'a> {
 
     // `self` needs to be consumed and the client returned due to parameters
     // being consumed in request construction.
-    fn request(self) -> Result<(Request, &'a Client), Error> {
+    fn request(&self) -> Result<Request<'a>, Error> {
         let request = Request::builder(Route::InteractionCallback {
             interaction_id: self.interaction_id.0,
             interaction_token: self.interaction_token,
@@ -40,7 +40,7 @@ impl<'a> InteractionCallback<'a> {
         .json(&self.response)?
         .build();
 
-        Ok((request, self.http))
+        Ok(request)
     }
 
     /// Execute the request, returning a future resolving to a [`Response`].
@@ -48,7 +48,7 @@ impl<'a> InteractionCallback<'a> {
     /// [`Response`]: crate::response::Response
     pub fn exec(self) -> ResponseFuture<EmptyBody> {
         match self.request() {
-            Ok((request, client)) => client.request(request),
+            Ok(request) => self.http.request(request),
             Err(source) => ResponseFuture::error(source),
         }
     }

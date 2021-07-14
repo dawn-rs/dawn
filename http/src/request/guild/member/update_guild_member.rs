@@ -47,7 +47,7 @@ impl UpdateGuildMemberError {
 impl Display for UpdateGuildMemberError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match &self.kind {
-            UpdateGuildMemberErrorType::NicknameInvalid { .. } => {
+            UpdateGuildMemberErrorType::NicknameInvalid => {
                 f.write_str("the nickname length is invalid")
             }
         }
@@ -61,11 +61,12 @@ impl Error for UpdateGuildMemberError {}
 #[non_exhaustive]
 pub enum UpdateGuildMemberErrorType {
     /// The nickname is either empty or the length is more than 32 UTF-16 characters.
-    NicknameInvalid { nickname: String },
+    NicknameInvalid,
 }
 
 #[derive(Default, Serialize)]
-struct UpdateGuildMemberFields {
+struct UpdateGuildMemberFields<'a> {
+    #[allow(clippy::option_option)]
     #[serde(skip_serializing_if = "Option::is_none")]
     channel_id: Option<NullableField<ChannelId>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -73,9 +74,9 @@ struct UpdateGuildMemberFields {
     #[serde(skip_serializing_if = "Option::is_none")]
     mute: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    nick: Option<NullableField<String>>,
+    nick: Option<NullableField<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    roles: Option<Vec<RoleId>>,
+    roles: Option<&'a [RoleId]>,
 }
 
 /// Update a guild member.
@@ -84,11 +85,11 @@ struct UpdateGuildMemberFields {
 ///
 /// [the discord docs]: https://discord.com/developers/docs/resources/guild#modify-guild-member
 pub struct UpdateGuildMember<'a> {
-    fields: UpdateGuildMemberFields,
+    fields: UpdateGuildMemberFields<'a>,
     guild_id: GuildId,
     http: &'a Client,
     user_id: UserId,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 impl<'a> UpdateGuildMember<'a> {
@@ -103,8 +104,7 @@ impl<'a> UpdateGuildMember<'a> {
     }
 
     /// Move the member to a different voice channel.
-    pub fn channel_id(mut self, channel_id: impl Into<Option<ChannelId>>) -> Self {
-        let channel_id = channel_id.into();
+    pub fn channel_id(mut self, channel_id: Option<ChannelId>) -> Self {
         self.fields
             .channel_id
             .replace(NullableField::from_option(channel_id));
@@ -134,15 +134,11 @@ impl<'a> UpdateGuildMember<'a> {
     ///
     /// Returns an [`UpdateGuildMemberErrorType::NicknameInvalid`] error type if
     /// the nickname length is too short or too long.
-    pub fn nick(self, nick: impl Into<Option<String>>) -> Result<Self, UpdateGuildMemberError> {
-        self._nick(nick.into())
-    }
-
-    fn _nick(mut self, nick: Option<String>) -> Result<Self, UpdateGuildMemberError> {
+    pub fn nick(mut self, nick: Option<&'a str>) -> Result<Self, UpdateGuildMemberError> {
         if let Some(nick) = nick {
-            if !validate::nickname(&nick) {
+            if !validate::nickname(nick) {
                 return Err(UpdateGuildMemberError {
-                    kind: UpdateGuildMemberErrorType::NicknameInvalid { nickname: nick },
+                    kind: UpdateGuildMemberErrorType::NicknameInvalid,
                 });
             }
 
@@ -155,13 +151,13 @@ impl<'a> UpdateGuildMember<'a> {
     }
 
     /// Set the new list of roles for a member.
-    pub fn roles(mut self, roles: Vec<RoleId>) -> Self {
+    pub fn roles(mut self, roles: &'a [RoleId]) -> Self {
         self.fields.roles.replace(roles);
 
         self
     }
 
-    fn request(&self) -> Result<Request, HttpError> {
+    fn request(&self) -> Result<Request<'a>, HttpError> {
         let mut request = Request::builder(Route::UpdateMember {
             guild_id: self.guild_id.0,
             user_id: self.user_id.0,
@@ -191,10 +187,9 @@ impl<'a> UpdateGuildMember<'a> {
     }
 }
 
-impl<'a> AuditLogReason for UpdateGuildMember<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for UpdateGuildMember<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }
@@ -216,7 +211,7 @@ mod tests {
 
     #[test]
     fn test_request() -> Result<(), Box<dyn Error>> {
-        let client = Client::new("foo");
+        let client = Client::new("foo".to_owned());
         let builder = UpdateGuildMember::new(&client, GUILD_ID, USER_ID)
             .deaf(true)
             .mute(true);
@@ -234,14 +229,14 @@ mod tests {
         let expected = Request::builder(route).json(&body)?.build();
 
         assert_eq!(actual.body, expected.body);
-        assert_eq!(actual.path, expected.path);
+        assert_eq!(actual.route, expected.route);
 
         Ok(())
     }
 
     #[test]
     fn test_nick_set_null() -> Result<(), Box<dyn Error>> {
-        let client = Client::new("foo");
+        let client = Client::new("foo".to_owned());
         let builder = UpdateGuildMember::new(&client, GUILD_ID, USER_ID).nick(None)?;
         let actual = builder.request()?;
 
@@ -262,13 +257,12 @@ mod tests {
 
     #[test]
     fn test_nick_set_value() -> Result<(), Box<dyn Error>> {
-        let client = Client::new("foo");
-        let builder =
-            UpdateGuildMember::new(&client, GUILD_ID, USER_ID).nick(Some("foo".to_owned()))?;
+        let client = Client::new("foo".to_owned());
+        let builder = UpdateGuildMember::new(&client, GUILD_ID, USER_ID).nick(Some("foo"))?;
         let actual = builder.request()?;
 
         let body = UpdateGuildMemberFields {
-            nick: Some(NullableField::Value("foo".to_owned())),
+            nick: Some(NullableField::Value("foo")),
             ..UpdateGuildMemberFields::default()
         };
         let route = Route::UpdateMember {

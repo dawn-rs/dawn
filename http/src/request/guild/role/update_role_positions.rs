@@ -15,19 +15,19 @@ use twilight_model::{
 pub struct UpdateRolePositions<'a> {
     guild_id: GuildId,
     http: &'a Client,
-    roles: Vec<(RoleId, u64)>,
+    roles: &'a [(RoleId, u64)],
 }
 
 impl<'a> UpdateRolePositions<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         http: &'a Client,
         guild_id: GuildId,
-        roles: impl Iterator<Item = (RoleId, u64)>,
+        roles: &'a [(RoleId, u64)],
     ) -> Self {
         Self {
             guild_id,
             http,
-            roles: roles.collect(),
+            roles,
         }
     }
 

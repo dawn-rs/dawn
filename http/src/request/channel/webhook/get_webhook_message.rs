@@ -11,21 +11,21 @@ use twilight_model::{
 pub struct GetWebhookMessage<'a> {
     http: &'a Client,
     message_id: MessageId,
-    token: String,
+    token: &'a str,
     webhook_id: WebhookId,
 }
 
 impl<'a> GetWebhookMessage<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         http: &'a Client,
         webhook_id: WebhookId,
-        token: impl Into<String>,
+        token: &'a str,
         message_id: MessageId,
     ) -> Self {
         Self {
             http,
             message_id,
-            token: token.into(),
+            token,
             webhook_id,
         }
     }

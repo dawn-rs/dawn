@@ -13,26 +13,26 @@ use twilight_model::{
 };
 
 #[derive(Default, Serialize)]
-pub(crate) struct ExecuteWebhookFields {
+pub(crate) struct ExecuteWebhookFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
-    avatar_url: Option<String>,
+    avatar_url: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<String>,
+    content: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    embeds: Option<Vec<Embed>>,
+    embeds: Option<&'a [Embed]>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    payload_json: Option<Vec<u8>>,
+    payload_json: Option<&'a [u8]>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tts: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    username: Option<String>,
+    username: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) allowed_mentions: Option<AllowedMentions>,
 }
 
 /// Execute a webhook, sending a message to its channel.
 ///
-/// You can only specify one of [`content`], [`embeds`], or [`file`].
+/// You can only specify one of [`content`], [`embeds`], or [`files`].
 ///
 /// # Examples
 ///
@@ -42,7 +42,7 @@ pub(crate) struct ExecuteWebhookFields {
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 /// let id = WebhookId(432);
 ///
 /// client
@@ -55,22 +55,22 @@ pub(crate) struct ExecuteWebhookFields {
 ///
 /// [`content`]: Self::content
 /// [`embeds`]: Self::embeds
-/// [`file`]: Self::file
+/// [`files`]: Self::files
 pub struct ExecuteWebhook<'a> {
-    pub(crate) fields: ExecuteWebhookFields,
-    files: Vec<(String, Vec<u8>)>,
+    pub(crate) fields: ExecuteWebhookFields<'a>,
+    files: &'a [(&'a str, &'a [u8])],
     pub(super) http: &'a Client,
-    token: String,
+    token: &'a str,
     webhook_id: WebhookId,
 }
 
 impl<'a> ExecuteWebhook<'a> {
-    pub(crate) fn new(http: &'a Client, webhook_id: WebhookId, token: impl Into<String>) -> Self {
+    pub(crate) fn new(http: &'a Client, webhook_id: WebhookId, token: &'a str) -> Self {
         Self {
             fields: ExecuteWebhookFields::default(),
-            files: Vec::new(),
+            files: &[],
             http,
-            token: token.into(),
+            token,
             webhook_id,
         }
     }
@@ -83,8 +83,8 @@ impl<'a> ExecuteWebhook<'a> {
     }
 
     /// The URL of the avatar of the webhook.
-    pub fn avatar_url(mut self, avatar_url: impl Into<String>) -> Self {
-        self.fields.avatar_url.replace(avatar_url.into());
+    pub fn avatar_url(mut self, avatar_url: &'a str) -> Self {
+        self.fields.avatar_url.replace(avatar_url);
 
         self
     }
@@ -92,36 +92,22 @@ impl<'a> ExecuteWebhook<'a> {
     /// The content of the webook's message.
     ///
     /// Up to 2000 UTF-16 codepoints, same as a message.
-    pub fn content(mut self, content: impl Into<String>) -> Self {
-        self.fields.content.replace(content.into());
+    pub fn content(mut self, content: &'a str) -> Self {
+        self.fields.content.replace(content);
 
         self
     }
 
     /// Set the list of embeds of the webhook's message.
-    pub fn embeds(mut self, embeds: Vec<Embed>) -> Self {
+    pub fn embeds(mut self, embeds: &'a [Embed]) -> Self {
         self.fields.embeds.replace(embeds);
 
         self
     }
 
-    /// Attach a file to the webhook.
-    ///
-    /// This method is repeatable.
-    pub fn file(mut self, name: impl Into<String>, file: impl Into<Vec<u8>>) -> Self {
-        self.files.push((name.into(), file.into()));
-
-        self
-    }
-
     /// Attach multiple files to the webhook.
-    pub fn files<N: Into<String>, F: Into<Vec<u8>>>(
-        mut self,
-        attachments: impl IntoIterator<Item = (N, F)>,
-    ) -> Self {
-        for (name, file) in attachments {
-            self = self.file(name, file);
-        }
+    pub const fn files(mut self, files: &'a [(&'a str, &'a [u8])]) -> Self {
+        self.files = files;
 
         self
     }
@@ -142,10 +128,10 @@ impl<'a> ExecuteWebhook<'a> {
     ///
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("token");
+    /// # let client = Client::new("token".to_owned());
     /// let message = client.execute_webhook(WebhookId(1), "token here")
     ///     .content("some content")
-    ///     .embeds(vec![EmbedBuilder::new().title("title").build()?])
+    ///     .embeds(&[EmbedBuilder::new().title("title").build()?])
     ///     .wait()
     ///     .exec()
     ///     .await?
@@ -164,10 +150,10 @@ impl<'a> ExecuteWebhook<'a> {
     ///
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let client = Client::new("token");
+    /// # let client = Client::new("token".to_owned());
     /// let message = client.execute_webhook(WebhookId(1), "token here")
     ///     .content("some content")
-    ///     .payload_json(r#"{ "content": "other content", "embeds": [ { "title": "title" } ] }"#)
+    ///     .payload_json(br#"{ "content": "other content", "embeds": [ { "title": "title" } ] }"#)
     ///     .wait()
     ///     .exec()
     ///     .await?
@@ -180,8 +166,8 @@ impl<'a> ExecuteWebhook<'a> {
     ///
     /// [`payload_json`]: Self::payload_json
     /// [Discord Docs/Create Message]: https://discord.com/developers/docs/resources/channel#create-message-params
-    pub fn payload_json(mut self, payload_json: impl Into<Vec<u8>>) -> Self {
-        self.fields.payload_json.replace(payload_json.into());
+    pub fn payload_json(mut self, payload_json: &'a [u8]) -> Self {
+        self.fields.payload_json.replace(payload_json);
 
         self
     }
@@ -194,8 +180,8 @@ impl<'a> ExecuteWebhook<'a> {
     }
 
     /// Specify the username of the webhook's message.
-    pub fn username(mut self, username: impl Into<String>) -> Self {
-        self.fields.username.replace(username.into());
+    pub fn username(mut self, username: &'a str) -> Self {
+        self.fields.username.replace(username);
 
         self
     }
@@ -213,7 +199,7 @@ impl<'a> ExecuteWebhook<'a> {
 
     // `self` needs to be consumed and the client returned due to parameters
     // being consumed in request construction.
-    pub(super) fn request(self, wait: bool) -> Result<(Request, &'a Client), Error> {
+    pub(super) fn request(&self, wait: bool) -> Result<Request<'a>, Error> {
         let mut request = Request::builder(Route::ExecuteWebhook {
             token: self.token,
             wait: Some(wait),
@@ -244,7 +230,7 @@ impl<'a> ExecuteWebhook<'a> {
             request = request.json(&self.fields)?;
         }
 
-        Ok((request.build(), self.http))
+        Ok(request.build())
     }
 
     /// Execute the request, returning a future resolving to a [`Response`].
@@ -252,7 +238,7 @@ impl<'a> ExecuteWebhook<'a> {
     /// [`Response`]: crate::response::Response
     pub fn exec(self) -> ResponseFuture<EmptyBody> {
         match self.request(false) {
-            Ok((request, client)) => client.request(request),
+            Ok(request) => self.http.request(request),
             Err(source) => ResponseFuture::error(source),
         }
     }

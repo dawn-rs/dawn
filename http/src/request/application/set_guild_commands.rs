@@ -15,18 +15,18 @@ use twilight_model::{
 /// This method is idempotent: it can be used on every start, without being
 /// ratelimited if there aren't changes to the commands.
 pub struct SetGuildCommands<'a> {
-    commands: Vec<Command>,
+    commands: &'a [Command],
     application_id: ApplicationId,
     guild_id: GuildId,
     http: &'a Client,
 }
 
 impl<'a> SetGuildCommands<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         http: &'a Client,
         application_id: ApplicationId,
         guild_id: GuildId,
-        commands: Vec<Command>,
+        commands: &'a [Command],
     ) -> Self {
         Self {
             commands,
@@ -36,7 +36,7 @@ impl<'a> SetGuildCommands<'a> {
         }
     }
 
-    fn request(&self) -> Result<Request, Error> {
+    fn request(&self) -> Result<Request<'a>, Error> {
         Request::builder(Route::SetGuildCommands {
             application_id: self.application_id.0,
             guild_id: self.guild_id.0,

@@ -46,7 +46,7 @@ impl CreateStageInstanceError {
 impl Display for CreateStageInstanceError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match &self.kind {
-            CreateStageInstanceErrorType::InvalidTopic { .. } => f.write_str("invalid topic"),
+            CreateStageInstanceErrorType::InvalidTopic => f.write_str("invalid topic"),
         }
     }
 }
@@ -62,25 +62,22 @@ impl Error for CreateStageInstanceError {
 #[derive(Debug)]
 pub enum CreateStageInstanceErrorType {
     /// Topic is not between 1 and 120 characters in length.
-    InvalidTopic {
-        /// Invalid topic.
-        topic: String,
-    },
+    InvalidTopic,
 }
 
 #[derive(Default, Serialize)]
-struct CreateStageInstanceFields {
+struct CreateStageInstanceFields<'a> {
     channel_id: ChannelId,
     #[serde(skip_serializing_if = "Option::is_none")]
     privacy_level: Option<PrivacyLevel>,
-    topic: String,
+    topic: &'a str,
 }
 
 /// Create a new stage instance associated with a stage channel.
 ///
 /// Requires the user to be a moderator of the stage channel.
 pub struct CreateStageInstance<'a> {
-    fields: CreateStageInstanceFields,
+    fields: CreateStageInstanceFields<'a>,
     http: &'a Client,
 }
 
@@ -88,19 +85,11 @@ impl<'a> CreateStageInstance<'a> {
     pub(crate) fn new(
         http: &'a Client,
         channel_id: ChannelId,
-        topic: impl Into<String>,
+        topic: &'a str,
     ) -> Result<Self, CreateStageInstanceError> {
-        Self::_new(http, channel_id, topic.into())
-    }
-
-    fn _new(
-        http: &'a Client,
-        channel_id: ChannelId,
-        topic: String,
-    ) -> Result<Self, CreateStageInstanceError> {
-        if !validate::stage_topic(&topic) {
+        if !validate::stage_topic(topic) {
             return Err(CreateStageInstanceError {
-                kind: CreateStageInstanceErrorType::InvalidTopic { topic },
+                kind: CreateStageInstanceErrorType::InvalidTopic,
                 source: None,
             });
         }

@@ -38,21 +38,19 @@ impl From<(ChannelId, u64)> for Position {
 pub struct UpdateGuildChannelPositions<'a> {
     guild_id: GuildId,
     http: &'a Client,
-    positions: Vec<Position>,
+    positions: &'a [Position],
 }
 
 impl<'a> UpdateGuildChannelPositions<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         http: &'a Client,
         guild_id: GuildId,
-        channel_positions: impl Iterator<Item = impl Into<Position>>,
+        channel_positions: &'a [Position],
     ) -> Self {
-        let positions = channel_positions.map(Into::into).collect();
-
         Self {
             guild_id,
             http,
-            positions,
+            positions: channel_positions,
         }
     }
 

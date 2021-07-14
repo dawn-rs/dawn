@@ -16,22 +16,22 @@ use twilight_model::{
 };
 
 #[derive(Default, Serialize)]
-pub(crate) struct CreateFollowupMessageFields {
+pub(crate) struct CreateFollowupMessageFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
-    avatar_url: Option<String>,
+    avatar_url: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<String>,
+    content: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    embeds: Option<Vec<Embed>>,
+    embeds: Option<&'a [Embed]>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    payload_json: Option<Vec<u8>>,
+    payload_json: Option<&'a [u8]>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tts: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    username: Option<String>,
+    username: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     flags: Option<MessageFlags>,
-    allowed_mentions: Option<AllowedMentions>,
+    allowed_mentions: Option<&'a AllowedMentions>,
 }
 
 /// Create a followup message to an interaction.
@@ -59,40 +59,36 @@ pub(crate) struct CreateFollowupMessageFields {
 ///
 /// [`content`]: Self::content
 /// [`embeds`]: Self::embeds
-/// [`file`]: Self::file
+/// [`files`]: Self::files
 pub struct CreateFollowupMessage<'a> {
-    pub(crate) fields: CreateFollowupMessageFields,
-    files: Vec<(String, Vec<u8>)>,
+    pub(crate) fields: CreateFollowupMessageFields<'a>,
+    files: &'a [(&'a str, &'a [u8])],
     http: &'a Client,
-    token: String,
+    token: &'a str,
     application_id: ApplicationId,
 }
 
 impl<'a> CreateFollowupMessage<'a> {
-    pub(crate) fn new(
-        http: &'a Client,
-        application_id: ApplicationId,
-        token: impl Into<String>,
-    ) -> Self {
+    pub(crate) fn new(http: &'a Client, application_id: ApplicationId, token: &'a str) -> Self {
         Self {
             fields: CreateFollowupMessageFields::default(),
-            files: Vec::new(),
+            files: &[],
             http,
-            token: token.into(),
+            token,
             application_id,
         }
     }
 
     /// Specify the [`AllowedMentions`] for the webhook message.
-    pub fn allowed_mentions(mut self, allowed_mentions: AllowedMentions) -> Self {
+    pub fn allowed_mentions(mut self, allowed_mentions: &'a AllowedMentions) -> Self {
         self.fields.allowed_mentions.replace(allowed_mentions);
 
         self
     }
 
     /// The URL of the avatar of the webhook.
-    pub fn avatar_url(mut self, avatar_url: impl Into<String>) -> Self {
-        self.fields.avatar_url.replace(avatar_url.into());
+    pub fn avatar_url(mut self, avatar_url: &'a str) -> Self {
+        self.fields.avatar_url.replace(avatar_url);
 
         self
     }
@@ -100,14 +96,14 @@ impl<'a> CreateFollowupMessage<'a> {
     /// The content of the webook's message.
     ///
     /// Up to 2000 UTF-16 codepoints.
-    pub fn content(mut self, content: impl Into<String>) -> Self {
-        self.fields.content.replace(content.into());
+    pub fn content(mut self, content: &'a str) -> Self {
+        self.fields.content.replace(content);
 
         self
     }
 
     /// Set the list of embeds of the webhook's message.
-    pub fn embeds(mut self, embeds: Vec<Embed>) -> Self {
+    pub fn embeds(mut self, embeds: &'a [Embed]) -> Self {
         self.fields.embeds.replace(embeds);
 
         self
@@ -124,23 +120,9 @@ impl<'a> CreateFollowupMessage<'a> {
         self
     }
 
-    /// Attach a file to the webhook.
-    ///
-    /// This method is repeatable.
-    pub fn file(mut self, name: impl Into<String>, file: impl Into<Vec<u8>>) -> Self {
-        self.files.push((name.into(), file.into()));
-
-        self
-    }
-
     /// Attach multiple files to the webhook.
-    pub fn files<N: Into<String>, F: Into<Vec<u8>>>(
-        mut self,
-        attachments: impl IntoIterator<Item = (N, F)>,
-    ) -> Self {
-        for (name, file) in attachments {
-            self = self.file(name, file);
-        }
+    pub const fn files(mut self, files: &'a [(&'a str, &'a [u8])]) -> Self {
+        self.files = files;
 
         self
     }
@@ -167,7 +149,7 @@ impl<'a> CreateFollowupMessage<'a> {
     ///
     /// let message = client.create_followup_message("token here")?
     ///     .content("some content")
-    ///     .embeds(vec![EmbedBuilder::new().title("title").build()?])
+    ///     .embeds(&[EmbedBuilder::new().title("title").build()?])
     ///     .exec()
     ///     .await?
     ///     .model()
@@ -191,7 +173,7 @@ impl<'a> CreateFollowupMessage<'a> {
     ///
     /// let message = client.create_followup_message("token here")?
     ///     .content("some content")
-    ///     .payload_json(r#"{ "content": "other content", "embeds": [ { "title": "title" } ] }"#)
+    ///     .payload_json(br#"{ "content": "other content", "embeds": [ { "title": "title" } ] }"#)
     ///     .exec()
     ///     .await?
     ///     .model()
@@ -203,8 +185,8 @@ impl<'a> CreateFollowupMessage<'a> {
     ///
     /// [`payload_json`]: Self::payload_json
     /// [Discord Docs/Create Message]: https://discord.com/developers/docs/resources/channel#create-message-params
-    pub fn payload_json(mut self, payload_json: impl Into<Vec<u8>>) -> Self {
-        self.fields.payload_json.replace(payload_json.into());
+    pub fn payload_json(mut self, payload_json: &'a [u8]) -> Self {
+        self.fields.payload_json.replace(payload_json);
 
         self
     }
@@ -217,15 +199,15 @@ impl<'a> CreateFollowupMessage<'a> {
     }
 
     /// Specify the username of the webhook's message.
-    pub fn username(mut self, username: impl Into<String>) -> Self {
-        self.fields.username.replace(username.into());
+    pub fn username(mut self, username: &'a str) -> Self {
+        self.fields.username.replace(username);
 
         self
     }
 
     // `self` needs to be consumed and the client returned due to parameters
     // being consumed in request construction.
-    fn request(mut self) -> Result<(Request, &'a Client), Error> {
+    fn request(&self) -> Result<Request<'a>, Error> {
         let mut request = Request::builder(Route::ExecuteWebhook {
             token: self.token,
             wait: None,
@@ -235,8 +217,8 @@ impl<'a> CreateFollowupMessage<'a> {
         if !self.files.is_empty() || self.fields.payload_json.is_some() {
             let mut form = Form::new();
 
-            for (index, (name, file)) in self.files.drain(..).enumerate() {
-                form.file(format!("{}", index).as_bytes(), name.as_bytes(), &file);
+            for (index, (name, file)) in self.files.iter().enumerate() {
+                form.file(index.to_be_bytes().as_ref(), name.as_bytes(), file);
             }
 
             if let Some(payload_json) = &self.fields.payload_json {
@@ -251,7 +233,7 @@ impl<'a> CreateFollowupMessage<'a> {
             request = request.json(&self.fields)?;
         }
 
-        Ok((request.build(), self.http))
+        Ok(request.build())
     }
 
     /// Execute the request, returning a future resolving to a [`Response`].
@@ -259,7 +241,7 @@ impl<'a> CreateFollowupMessage<'a> {
     /// [`Response`]: crate::response::Response
     pub fn exec(self) -> ResponseFuture<Message> {
         match self.request() {
-            Ok((request, client)) => client.request(request),
+            Ok(request) => self.http.request(request),
             Err(source) => ResponseFuture::error(source),
         }
     }

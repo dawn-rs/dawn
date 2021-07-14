@@ -63,41 +63,27 @@ impl Error for UpdateTemplateError {}
 #[non_exhaustive]
 pub enum UpdateTemplateErrorType {
     /// Name of the template is invalid.
-    NameInvalid {
-        /// Provided name.
-        name: String,
-    },
+    NameInvalid,
     /// Description of the template is invalid.
-    DescriptionTooLarge {
-        /// Provided description.
-        description: String,
-    },
+    DescriptionTooLarge,
 }
 
 #[derive(Serialize)]
-struct UpdateTemplateFields {
-    name: Option<String>,
-    description: Option<String>,
+struct UpdateTemplateFields<'a> {
+    name: Option<&'a str>,
+    description: Option<&'a str>,
 }
 
 /// Update the template's metadata, by ID and code.
 pub struct UpdateTemplate<'a> {
-    fields: UpdateTemplateFields,
+    fields: UpdateTemplateFields<'a>,
     guild_id: GuildId,
     http: &'a Client,
-    template_code: String,
+    template_code: &'a str,
 }
 
 impl<'a> UpdateTemplate<'a> {
-    pub(crate) fn new(
-        http: &'a Client,
-        guild_id: GuildId,
-        template_code: impl Into<String>,
-    ) -> Self {
-        Self::_new(http, guild_id, template_code.into())
-    }
-
-    const fn _new(http: &'a Client, guild_id: GuildId, template_code: String) -> Self {
+    pub(crate) const fn new(http: &'a Client, guild_id: GuildId, template_code: &'a str) -> Self {
         Self {
             fields: UpdateTemplateFields {
                 name: None,
@@ -117,14 +103,10 @@ impl<'a> UpdateTemplate<'a> {
     ///
     /// Returns an [`UpdateTemplateErrorType::DescriptionTooLarge`] error type
     /// if the description is too large.
-    pub fn description(self, description: impl Into<String>) -> Result<Self, UpdateTemplateError> {
-        self._description(description.into())
-    }
-
-    fn _description(mut self, description: String) -> Result<Self, UpdateTemplateError> {
+    pub fn description(mut self, description: &'a str) -> Result<Self, UpdateTemplateError> {
         if !validate::template_description(&description) {
             return Err(UpdateTemplateError {
-                kind: UpdateTemplateErrorType::DescriptionTooLarge { description },
+                kind: UpdateTemplateErrorType::DescriptionTooLarge,
             });
         }
 
@@ -139,16 +121,12 @@ impl<'a> UpdateTemplate<'a> {
     ///
     /// # Errors
     ///
-    /// Returns an [`UpdateTemplateErrorType::NameInvalid`] error type if the
+    /// Returns an [`UpdateTemplateErrorType::NameInvalid`] error type when the
     /// name is invalid.
-    pub fn name(self, name: impl Into<String>) -> Result<Self, UpdateTemplateError> {
-        self._name(name.into())
-    }
-
-    fn _name(mut self, name: String) -> Result<Self, UpdateTemplateError> {
-        if !validate::template_name(&name) {
+    pub fn name(mut self, name: &'a str) -> Result<Self, UpdateTemplateError> {
+        if !validate::template_name(name) {
             return Err(UpdateTemplateError {
-                kind: UpdateTemplateErrorType::NameInvalid { name },
+                kind: UpdateTemplateErrorType::NameInvalid,
             });
         }
 

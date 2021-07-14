@@ -34,12 +34,9 @@ impl<'a> CreateGuildCommand<'a> {
         http: &'a Client,
         application_id: ApplicationId,
         guild_id: GuildId,
-        name: impl Into<String>,
-        description: impl Into<String>,
+        name: String,
+        description: String,
     ) -> Result<Self, InteractionError> {
-        let name = name.into();
-        let description = description.into();
-
         if !validate::command_name(&name) {
             return Err(InteractionError {
                 kind: InteractionErrorType::CommandNameValidationFailed { name },
@@ -60,7 +57,7 @@ impl<'a> CreateGuildCommand<'a> {
                 default_permission: None,
                 description,
                 id: None,
-                options: vec![],
+                options: Vec::new(),
             },
             application_id,
             guild_id,
@@ -101,7 +98,7 @@ impl<'a> CreateGuildCommand<'a> {
         Ok(self)
     }
 
-    fn request(&self) -> Result<Request, HttpError> {
+    fn request(&self) -> Result<Request<'a>, HttpError> {
         Request::builder(Route::CreateGuildCommand {
             application_id: self.application_id.0,
             guild_id: self.guild_id.0,

@@ -13,7 +13,7 @@ use twilight_model::channel::Message;
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 /// let id = WebhookId(432);
 ///
 /// let message = client
@@ -45,11 +45,9 @@ impl<'a> ExecuteWebhookAndWait<'a> {
     ///
     /// [`Response`]: crate::response::Response
     pub fn exec(self) -> ResponseFuture<Message> {
-        let (request, client) = match self.inner.request(false) {
-            Ok((request, client)) => (request, client),
-            Err(source) => return ResponseFuture::error(source),
-        };
-
-        client.request(request)
+        match self.inner.request(false) {
+            Ok(request) => self.inner.http.request(request),
+            Err(source) => ResponseFuture::error(source),
+        }
     }
 }

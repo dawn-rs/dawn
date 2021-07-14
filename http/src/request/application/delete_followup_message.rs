@@ -26,26 +26,26 @@ use twilight_model::id::{ApplicationId, MessageId};
 pub struct DeleteFollowupMessage<'a> {
     http: &'a Client,
     message_id: MessageId,
-    token: String,
+    token: &'a str,
     application_id: ApplicationId,
 }
 
 impl<'a> DeleteFollowupMessage<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         http: &'a Client,
         application_id: ApplicationId,
-        token: impl Into<String>,
+        token: &'a str,
         message_id: MessageId,
     ) -> Self {
         Self {
             http,
             message_id,
-            token: token.into(),
+            token,
             application_id,
         }
     }
 
-    fn request(self) -> Request {
+    const fn request(self) -> Request<'a> {
         Request::from_route(Route::DeleteWebhookMessage {
             message_id: self.message_id.0,
             token: self.token,
@@ -69,18 +69,17 @@ mod tests {
 
     #[test]
     fn test_request() {
-        let client = Client::new("token");
+        let client = Client::new("token".to_owned());
 
         let builder = DeleteFollowupMessage::new(&client, ApplicationId(1), "token", MessageId(2));
         let actual = builder.request();
 
         let expected = Request::from_route(Route::DeleteWebhookMessage {
             message_id: 2,
-            token: "token".to_owned(),
+            token: "token",
             webhook_id: 1,
         });
 
-        assert_eq!(expected.body, actual.body);
-        assert_eq!(expected.path, actual.path);
+        assert_eq!(expected.route, actual.route);
     }
 }

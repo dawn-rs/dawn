@@ -11,7 +11,7 @@ use twilight_model::{
 };
 
 #[derive(Default, Serialize)]
-struct CreateRoleFields {
+struct CreateRoleFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     color: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -19,7 +19,7 @@ struct CreateRoleFields {
     #[serde(skip_serializing_if = "Option::is_none")]
     mentionable: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<String>,
+    name: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     permissions: Option<Permissions>,
 }
@@ -34,7 +34,7 @@ struct CreateRoleFields {
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 /// let guild_id = GuildId(234);
 ///
 /// client.create_role(guild_id)
@@ -45,10 +45,10 @@ struct CreateRoleFields {
 /// # Ok(()) }
 /// ```
 pub struct CreateRole<'a> {
-    fields: CreateRoleFields,
+    fields: CreateRoleFields<'a>,
     guild_id: GuildId,
     http: &'a Client,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 impl<'a> CreateRole<'a> {
@@ -85,8 +85,8 @@ impl<'a> CreateRole<'a> {
     /// Set the name of the role.
     ///
     /// If none is specified, Discord sets this to `New Role`.
-    pub fn name(mut self, name: impl Into<String>) -> Self {
-        self.fields.name.replace(name.into());
+    pub fn name(mut self, name: &'a str) -> Self {
+        self.fields.name.replace(name);
 
         self
     }
@@ -124,10 +124,9 @@ impl<'a> CreateRole<'a> {
     }
 }
 
-impl<'a> AuditLogReason for CreateRole<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for CreateRole<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }

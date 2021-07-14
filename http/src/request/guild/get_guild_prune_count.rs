@@ -66,14 +66,14 @@ pub enum GetGuildPruneCountErrorType {
 }
 
 #[derive(Default)]
-struct GetGuildPruneCountFields {
+struct GetGuildPruneCountFields<'a> {
     days: Option<u64>,
-    include_roles: Vec<u64>,
+    include_roles: &'a [RoleId],
 }
 
 /// Get the counts of guild members to be pruned.
 pub struct GetGuildPruneCount<'a> {
-    fields: GetGuildPruneCountFields,
+    fields: GetGuildPruneCountFields<'a>,
     guild_id: GuildId,
     http: &'a Client,
 }
@@ -109,9 +109,7 @@ impl<'a> GetGuildPruneCount<'a> {
     }
 
     /// List of roles to include when calculating prune count
-    pub fn include_roles(mut self, roles: impl Iterator<Item = RoleId>) -> Self {
-        let roles = roles.map(|e| e.0).collect::<Vec<_>>();
-
+    pub const fn include_roles(mut self, roles: &'a [RoleId]) -> Self {
         self.fields.include_roles = roles;
 
         self
@@ -140,7 +138,7 @@ mod test {
     #[test]
     fn test_days() {
         fn days_valid(days: u64) -> bool {
-            let client = Client::new("");
+            let client = Client::new("".to_owned());
             let count = GetGuildPruneCount::new(&client, GuildId(0));
             let days_result = count.days(days);
             days_result.is_ok()

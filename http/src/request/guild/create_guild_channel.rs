@@ -52,32 +52,23 @@ impl CreateGuildChannelError {
 pub enum CreateGuildChannelErrorType {
     /// The length of the name is either fewer than 2 UTF-16 characters or
     /// more than 100 UTF-16 characters.
-    NameInvalid {
-        /// Provided name.
-        name: String,
-    },
+    NameInvalid,
     /// The seconds of the rate limit per user is more than 21600.
-    RateLimitPerUserInvalid {
-        /// Provided ratelimit.
-        rate_limit_per_user: u64,
-    },
+    RateLimitPerUserInvalid,
     /// The length of the topic is more than 1024 UTF-16 characters.
-    TopicInvalid {
-        /// Provided topic.
-        topic: String,
-    },
+    TopicInvalid,
 }
 
 impl Display for CreateGuildChannelError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match &self.kind {
-            CreateGuildChannelErrorType::NameInvalid { .. } => {
+            CreateGuildChannelErrorType::NameInvalid => {
                 f.write_str("the length of the name is invalid")
             }
-            CreateGuildChannelErrorType::RateLimitPerUserInvalid { .. } => {
+            CreateGuildChannelErrorType::RateLimitPerUserInvalid => {
                 f.write_str("the rate limit per user is invalid")
             }
-            CreateGuildChannelErrorType::TopicInvalid { .. } => f.write_str("the topic is invalid"),
+            CreateGuildChannelErrorType::TopicInvalid => f.write_str("the topic is invalid"),
         }
     }
 }
@@ -85,24 +76,24 @@ impl Display for CreateGuildChannelError {
 impl Error for CreateGuildChannelError {}
 
 #[derive(Serialize)]
-struct CreateGuildChannelFields {
+struct CreateGuildChannelFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     bitrate: Option<u64>,
     #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
     kind: Option<ChannelType>,
-    name: String,
+    name: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     nsfw: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parent_id: Option<ChannelId>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    permission_overwrites: Option<Vec<PermissionOverwrite>>,
+    permission_overwrites: Option<&'a [PermissionOverwrite]>,
     #[serde(skip_serializing_if = "Option::is_none")]
     position: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     rate_limit_per_user: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    topic: Option<String>,
+    topic: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     user_limit: Option<u64>,
 }
@@ -112,29 +103,21 @@ struct CreateGuildChannelFields {
 /// All fields are optional except for name. The minimum length of the name is 2 UTF-16 characters
 /// and the maximum is 100 UTF-16 characters.
 pub struct CreateGuildChannel<'a> {
-    fields: CreateGuildChannelFields,
+    fields: CreateGuildChannelFields<'a>,
     guild_id: GuildId,
     http: &'a Client,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 impl<'a> CreateGuildChannel<'a> {
     pub(crate) fn new(
         http: &'a Client,
         guild_id: GuildId,
-        name: impl Into<String>,
+        name: &'a str,
     ) -> Result<Self, CreateGuildChannelError> {
-        Self::_new(http, guild_id, name.into())
-    }
-
-    fn _new(
-        http: &'a Client,
-        guild_id: GuildId,
-        name: String,
-    ) -> Result<Self, CreateGuildChannelError> {
-        if !validate::channel_name(&name) {
+        if !validate::channel_name(name) {
             return Err(CreateGuildChannelError {
-                kind: CreateGuildChannelErrorType::NameInvalid { name },
+                kind: CreateGuildChannelErrorType::NameInvalid,
             });
         }
 
@@ -180,8 +163,8 @@ impl<'a> CreateGuildChannel<'a> {
 
     /// If this is specified, and the parent ID is a `ChannelType::CategoryChannel`, create this
     /// channel as a child of the category channel.
-    pub fn parent_id(mut self, parent_id: impl Into<ChannelId>) -> Self {
-        self.fields.parent_id.replace(parent_id.into());
+    pub fn parent_id(mut self, parent_id: ChannelId) -> Self {
+        self.fields.parent_id.replace(parent_id);
 
         self
     }
@@ -189,7 +172,7 @@ impl<'a> CreateGuildChannel<'a> {
     /// Set the permission overwrites of a channel.
     pub fn permission_overwrites(
         mut self,
-        permission_overwrites: Vec<PermissionOverwrite>,
+        permission_overwrites: &'a [PermissionOverwrite],
     ) -> Self {
         self.fields
             .permission_overwrites
@@ -226,9 +209,7 @@ impl<'a> CreateGuildChannel<'a> {
     ) -> Result<Self, CreateGuildChannelError> {
         if rate_limit_per_user > 21600 {
             return Err(CreateGuildChannelError {
-                kind: CreateGuildChannelErrorType::RateLimitPerUserInvalid {
-                    rate_limit_per_user,
-                },
+                kind: CreateGuildChannelErrorType::RateLimitPerUserInvalid,
             });
         }
 
@@ -247,14 +228,10 @@ impl<'a> CreateGuildChannel<'a> {
     /// the topic length is too long.
     ///
     /// [the discord docs]: https://discordapp.com/developers/docs/resources/channel#channel-object-channel-structure
-    pub fn topic(self, topic: impl Into<String>) -> Result<Self, CreateGuildChannelError> {
-        self._topic(topic.into())
-    }
-
-    fn _topic(mut self, topic: String) -> Result<Self, CreateGuildChannelError> {
+    pub fn topic(mut self, topic: &'a str) -> Result<Self, CreateGuildChannelError> {
         if topic.chars().count() > 1024 {
             return Err(CreateGuildChannelError {
-                kind: CreateGuildChannelErrorType::TopicInvalid { topic },
+                kind: CreateGuildChannelErrorType::TopicInvalid,
             });
         }
 
@@ -301,10 +278,9 @@ impl<'a> CreateGuildChannel<'a> {
     }
 }
 
-impl<'a> AuditLogReason for CreateGuildChannel<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for CreateGuildChannel<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }

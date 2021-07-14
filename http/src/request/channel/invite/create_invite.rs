@@ -57,15 +57,9 @@ impl Error for CreateInviteError {}
 #[non_exhaustive]
 pub enum CreateInviteErrorType {
     /// Configured maximum age is over 604800.
-    MaxAgeTooOld {
-        /// Provided maximum age.
-        provided: u64,
-    },
+    MaxAgeTooOld,
     /// Configured maximum uses is over 100.
-    MaxUsesTooLarge {
-        /// Provided maximum uses.
-        provided: u64,
-    },
+    MaxUsesTooLarge,
 }
 
 #[derive(Default, Serialize)]
@@ -79,7 +73,7 @@ struct CreateInviteFields {
     #[serde(skip_serializing_if = "Option::is_none")]
     target_application_id: Option<ApplicationId>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    target_user_id: Option<String>,
+    target_user_id: Option<UserId>,
     #[serde(skip_serializing_if = "Option::is_none")]
     target_type: Option<TargetType>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -98,7 +92,7 @@ struct CreateInviteFields {
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 ///
 /// let channel_id = ChannelId(123);
 /// let invite = client
@@ -114,7 +108,7 @@ pub struct CreateInvite<'a> {
     channel_id: ChannelId,
     fields: CreateInviteFields,
     http: &'a Client,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 impl<'a> CreateInvite<'a> {
@@ -158,7 +152,7 @@ impl<'a> CreateInvite<'a> {
     pub fn max_age(mut self, max_age: u64) -> Result<Self, CreateInviteError> {
         if !validate::invite_max_age(max_age) {
             return Err(CreateInviteError {
-                kind: CreateInviteErrorType::MaxAgeTooOld { provided: max_age },
+                kind: CreateInviteErrorType::MaxAgeTooOld,
             });
         }
 
@@ -196,7 +190,7 @@ impl<'a> CreateInvite<'a> {
     pub fn max_uses(mut self, max_uses: u64) -> Result<Self, CreateInviteError> {
         if !validate::invite_max_uses(max_uses) {
             return Err(CreateInviteError {
-                kind: CreateInviteErrorType::MaxUsesTooLarge { provided: max_uses },
+                kind: CreateInviteErrorType::MaxUsesTooLarge,
             });
         }
 
@@ -220,9 +214,7 @@ impl<'a> CreateInvite<'a> {
 
     /// Set the target user id for this invite.
     pub fn target_user_id(mut self, target_user_id: UserId) -> Self {
-        self.fields
-            .target_user_id
-            .replace(target_user_id.0.to_string());
+        self.fields.target_user_id.replace(target_user_id);
 
         self
     }
@@ -281,10 +273,9 @@ impl<'a> CreateInvite<'a> {
     }
 }
 
-impl<'a> AuditLogReason for CreateInvite<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for CreateInvite<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }
@@ -299,7 +290,7 @@ mod tests {
 
     #[test]
     fn test_max_age() -> Result<(), Box<dyn Error>> {
-        let client = Client::new("foo");
+        let client = Client::new("foo".to_owned());
         let mut builder = CreateInvite::new(&client, ChannelId(1)).max_age(0)?;
         assert_eq!(Some(0), builder.fields.max_age);
         builder = builder.max_age(604_800)?;
@@ -311,7 +302,7 @@ mod tests {
 
     #[test]
     fn test_max_uses() -> Result<(), Box<dyn Error>> {
-        let client = Client::new("foo");
+        let client = Client::new("foo".to_owned());
         let mut builder = CreateInvite::new(&client, ChannelId(1)).max_uses(0)?;
         assert_eq!(Some(0), builder.fields.max_uses);
         builder = builder.max_uses(100)?;

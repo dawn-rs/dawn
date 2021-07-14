@@ -45,9 +45,7 @@ impl GetCurrentUserGuildsError {
 impl Display for GetCurrentUserGuildsError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match &self.kind {
-            GetCurrentUserGuildsErrorType::LimitInvalid { .. } => {
-                f.write_str("the limit is invalid")
-            }
+            GetCurrentUserGuildsErrorType::LimitInvalid => f.write_str("the limit is invalid"),
         }
     }
 }
@@ -59,10 +57,7 @@ impl Error for GetCurrentUserGuildsError {}
 #[non_exhaustive]
 pub enum GetCurrentUserGuildsErrorType {
     /// The maximum number of guilds to retrieve is 0 or more than 100.
-    LimitInvalid {
-        /// Provided maximum number of guilds to retrieve.
-        limit: u64,
-    },
+    LimitInvalid,
 }
 
 struct GetCurrentUserGuildsFields {
@@ -84,7 +79,7 @@ struct GetCurrentUserGuildsFields {
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 ///
 /// let after = GuildId(300);
 /// let before = GuildId(400);
@@ -140,7 +135,7 @@ impl<'a> GetCurrentUserGuilds<'a> {
     pub fn limit(mut self, limit: u64) -> Result<Self, GetCurrentUserGuildsError> {
         if !validate::get_current_user_guilds_limit(limit) {
             return Err(GetCurrentUserGuildsError {
-                kind: GetCurrentUserGuildsErrorType::LimitInvalid { limit },
+                kind: GetCurrentUserGuildsErrorType::LimitInvalid,
             });
         }
 

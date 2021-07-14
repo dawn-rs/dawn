@@ -66,10 +66,10 @@ pub enum CreateGuildPruneErrorType {
 }
 
 #[derive(Default)]
-struct CreateGuildPruneFields {
+struct CreateGuildPruneFields<'a> {
     compute_prune_count: Option<bool>,
     days: Option<u64>,
-    include_roles: Vec<u64>,
+    include_roles: &'a [RoleId],
 }
 
 /// Begin a guild prune.
@@ -78,10 +78,10 @@ struct CreateGuildPruneFields {
 ///
 /// [the discord docs]: https://discord.com/developers/docs/resources/guild#begin-guild-prune
 pub struct CreateGuildPrune<'a> {
-    fields: CreateGuildPruneFields,
+    fields: CreateGuildPruneFields<'a>,
     guild_id: GuildId,
     http: &'a Client,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 impl<'a> CreateGuildPrune<'a> {
@@ -95,9 +95,7 @@ impl<'a> CreateGuildPrune<'a> {
     }
 
     /// List of roles to include when pruning.
-    pub fn include_roles(mut self, roles: impl Iterator<Item = RoleId>) -> Self {
-        let roles = roles.map(|e| e.0).collect::<Vec<_>>();
-
+    pub const fn include_roles(mut self, roles: &'a [RoleId]) -> Self {
         self.fields.include_roles = roles;
 
         self
@@ -154,10 +152,9 @@ impl<'a> CreateGuildPrune<'a> {
     }
 }
 
-impl<'a> AuditLogReason for CreateGuildPrune<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for CreateGuildPrune<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }

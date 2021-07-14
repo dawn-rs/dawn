@@ -44,13 +44,11 @@ impl UpdateChannelError {
 impl Display for UpdateChannelError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match &self.kind {
-            UpdateChannelErrorType::NameInvalid { .. } => {
-                f.write_str("the length of the name is invalid")
-            }
-            UpdateChannelErrorType::RateLimitPerUserInvalid { .. } => {
+            UpdateChannelErrorType::NameInvalid => f.write_str("the length of the name is invalid"),
+            UpdateChannelErrorType::RateLimitPerUserInvalid => {
                 f.write_str("the rate limit per user is invalid")
             }
-            UpdateChannelErrorType::TopicInvalid { .. } => f.write_str("the topic is invalid"),
+            UpdateChannelErrorType::TopicInvalid => f.write_str("the topic is invalid"),
         }
     }
 }
@@ -62,42 +60,33 @@ impl Error for UpdateChannelError {}
 pub enum UpdateChannelErrorType {
     /// The length of the name is either fewer than 2 UTF-16 characters or
     /// more than 100 UTF-16 characters.
-    NameInvalid {
-        /// Provided name.
-        name: String,
-    },
+    NameInvalid,
     /// The seconds of the rate limit per user is more than 21600.
-    RateLimitPerUserInvalid {
-        /// Provided ratelimit is invalid.
-        rate_limit_per_user: u64,
-    },
+    RateLimitPerUserInvalid,
     /// The length of the topic is more than 1024 UTF-16 characters.
-    TopicInvalid {
-        /// Provided topic.
-        topic: String,
-    },
+    TopicInvalid,
 }
 
 // The Discord API doesn't require the `name` and `kind` fields to be present,
 // but it does require them to be non-null.
 #[derive(Default, Serialize)]
-struct UpdateChannelFields {
+struct UpdateChannelFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     bitrate: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<String>,
+    name: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     nsfw: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parent_id: Option<NullableField<ChannelId>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    permission_overwrites: Option<Vec<PermissionOverwrite>>,
+    permission_overwrites: Option<&'a [PermissionOverwrite]>,
     #[serde(skip_serializing_if = "Option::is_none")]
     position: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     rate_limit_per_user: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    topic: Option<String>,
+    topic: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     user_limit: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -113,9 +102,9 @@ struct UpdateChannelFields {
 /// is 100 UTF-16 characters.
 pub struct UpdateChannel<'a> {
     channel_id: ChannelId,
-    fields: UpdateChannelFields,
+    fields: UpdateChannelFields<'a>,
     http: &'a Client,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 impl<'a> UpdateChannel<'a> {
@@ -144,14 +133,10 @@ impl<'a> UpdateChannel<'a> {
     ///
     /// Returns an [`UpdateChannelErrorType::NameInvalid`] error type if the name
     /// length is too short or too long.
-    pub fn name(self, name: impl Into<String>) -> Result<Self, UpdateChannelError> {
-        self._name(name.into())
-    }
-
-    fn _name(mut self, name: String) -> Result<Self, UpdateChannelError> {
-        if !validate::channel_name(&name) {
+    pub fn name(mut self, name: &'a str) -> Result<Self, UpdateChannelError> {
+        if !validate::channel_name(name) {
             return Err(UpdateChannelError {
-                kind: UpdateChannelErrorType::NameInvalid { name },
+                kind: UpdateChannelErrorType::NameInvalid,
             });
         }
 
@@ -169,9 +154,7 @@ impl<'a> UpdateChannel<'a> {
 
     /// If this is specified, and the parent ID is a `ChannelType::CategoryChannel`, move this
     /// channel to a child of the category channel.
-    pub fn parent_id(mut self, parent_id: impl Into<Option<ChannelId>>) -> Self {
-        let parent_id = parent_id.into();
-
+    pub fn parent_id(mut self, parent_id: Option<ChannelId>) -> Self {
         self.fields
             .parent_id
             .replace(NullableField::from_option(parent_id));
@@ -183,7 +166,7 @@ impl<'a> UpdateChannel<'a> {
     /// channel currently has, so use with caution!
     pub fn permission_overwrites(
         mut self,
-        permission_overwrites: Vec<PermissionOverwrite>,
+        permission_overwrites: &'a [PermissionOverwrite],
     ) -> Self {
         self.fields
             .permission_overwrites
@@ -220,9 +203,7 @@ impl<'a> UpdateChannel<'a> {
     ) -> Result<Self, UpdateChannelError> {
         if rate_limit_per_user > 21600 {
             return Err(UpdateChannelError {
-                kind: UpdateChannelErrorType::RateLimitPerUserInvalid {
-                    rate_limit_per_user,
-                },
+                kind: UpdateChannelErrorType::RateLimitPerUserInvalid,
             });
         }
 
@@ -241,14 +222,10 @@ impl<'a> UpdateChannel<'a> {
     /// length is too long.
     ///
     /// [the discord docs]: https://discordapp.com/developers/docs/resources/channel#channel-object-channel-structure
-    pub fn topic(self, topic: impl Into<String>) -> Result<Self, UpdateChannelError> {
-        self._topic(topic.into())
-    }
-
-    fn _topic(mut self, topic: String) -> Result<Self, UpdateChannelError> {
+    pub fn topic(mut self, topic: &'a str) -> Result<Self, UpdateChannelError> {
         if topic.chars().count() > 1024 {
             return Err(UpdateChannelError {
-                kind: UpdateChannelErrorType::TopicInvalid { topic },
+                kind: UpdateChannelErrorType::TopicInvalid,
             });
         }
 
@@ -310,10 +287,9 @@ impl<'a> UpdateChannel<'a> {
     }
 }
 
-impl<'a> AuditLogReason for UpdateChannel<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for UpdateChannel<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }

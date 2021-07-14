@@ -42,7 +42,7 @@ pub struct PermissionOverwrite {
     pub kind: PermissionOverwriteType,
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum PermissionOverwriteType {
     Member(UserId),
     Role(RoleId),
@@ -59,7 +59,7 @@ struct PermissionOverwriteData {
 }
 
 /// Type of a permission overwrite target.
-#[derive(Clone, Debug, Deserialize_repr, Eq, Hash, PartialEq, Serialize_repr)]
+#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq, Serialize_repr)]
 #[repr(u8)]
 #[serde(rename_all = "snake_case")]
 pub enum PermissionOverwriteTargetType {
@@ -127,7 +127,46 @@ mod tests {
         PermissionOverwrite, PermissionOverwriteTargetType, PermissionOverwriteType, Permissions,
     };
     use crate::id::UserId;
+    use serde::{Deserialize, Serialize};
     use serde_test::Token;
+    use static_assertions::{assert_fields, assert_impl_all, const_assert_eq};
+    use std::{fmt::Debug, hash::Hash};
+
+    assert_fields!(PermissionOverwrite: allow, deny, kind);
+    assert_impl_all!(
+        PermissionOverwriteTargetType: Clone,
+        Copy,
+        Debug,
+        Deserialize<'static>,
+        Eq,
+        Hash,
+        PartialEq,
+        Send,
+        Sync
+    );
+    assert_impl_all!(
+        PermissionOverwriteType: Clone,
+        Copy,
+        Debug,
+        Eq,
+        Hash,
+        PartialEq,
+        Send,
+        Sync
+    );
+    assert_impl_all!(
+        PermissionOverwrite: Clone,
+        Debug,
+        Deserialize<'static>,
+        Eq,
+        Hash,
+        PartialEq,
+        Send,
+        Serialize,
+        Sync
+    );
+    const_assert_eq!(0, PermissionOverwriteTargetType::Role as u8);
+    const_assert_eq!(1, PermissionOverwriteTargetType::Member as u8);
 
     #[test]
     fn test_overwrite() {

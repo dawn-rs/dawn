@@ -14,7 +14,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     future::join_all((1u8..=10).map(|x| {
         client
             .create_message(channel_id)
-            .content(format!("Ping #{}", x))
+            .content(&format!("Ping #{}", x))
             .expect("content not a valid length")
             .exec()
     }))

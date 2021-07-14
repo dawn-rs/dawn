@@ -11,21 +11,21 @@ use twilight_model::{
 };
 
 #[derive(Default, Serialize)]
-struct UpdateWebhookFields {
+struct UpdateWebhookFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
-    avatar: Option<NullableField<String>>,
+    avatar: Option<NullableField<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     channel_id: Option<ChannelId>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<NullableField<String>>,
+    name: Option<NullableField<&'a str>>,
 }
 
 /// Update a webhook by ID.
 pub struct UpdateWebhook<'a> {
-    fields: UpdateWebhookFields,
+    fields: UpdateWebhookFields<'a>,
     http: &'a Client,
     webhook_id: WebhookId,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 /// Update a webhook by its ID.
@@ -46,26 +46,24 @@ impl<'a> UpdateWebhook<'a> {
     /// base64-encoded image.
     ///
     /// [Discord Docs/Image Data]: https://discord.com/developers/docs/reference#image-data
-    pub fn avatar(mut self, avatar: impl Into<Option<String>>) -> Self {
+    pub fn avatar(mut self, avatar: Option<&'a str>) -> Self {
         self.fields
             .avatar
-            .replace(NullableField::from_option(avatar.into()));
+            .replace(NullableField::from_option(avatar));
 
         self
     }
 
     /// Move this webhook to a new channel.
-    pub fn channel_id(mut self, channel_id: impl Into<ChannelId>) -> Self {
-        self.fields.channel_id.replace(channel_id.into());
+    pub fn channel_id(mut self, channel_id: ChannelId) -> Self {
+        self.fields.channel_id.replace(channel_id);
 
         self
     }
 
     /// Change the name of the webhook.
-    pub fn name(mut self, name: impl Into<Option<String>>) -> Self {
-        self.fields
-            .name
-            .replace(NullableField::from_option(name.into()));
+    pub fn name(mut self, name: Option<&'a str>) -> Self {
+        self.fields.name.replace(NullableField::from_option(name));
 
         self
     }
@@ -97,10 +95,9 @@ impl<'a> UpdateWebhook<'a> {
     }
 }
 
-impl<'a> AuditLogReason for UpdateWebhook<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for UpdateWebhook<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }

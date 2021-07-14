@@ -16,13 +16,13 @@ impl<'a> DeleteChannelPermission<'a> {
     }
 
     /// Delete an override for an member.
-    pub fn member(self, user_id: impl Into<UserId>) -> DeleteChannelPermissionConfigured<'a> {
-        self.configure(user_id.into().0)
+    pub const fn member(self, user_id: UserId) -> DeleteChannelPermissionConfigured<'a> {
+        self.configure(user_id.0)
     }
 
     /// Delete an override for an role.
-    pub fn role(self, role_id: impl Into<RoleId>) -> DeleteChannelPermissionConfigured<'a> {
-        self.configure(role_id.into().0)
+    pub const fn role(self, role_id: RoleId) -> DeleteChannelPermissionConfigured<'a> {
+        self.configure(role_id.0)
     }
 
     const fn configure(self, target_id: u64) -> DeleteChannelPermissionConfigured<'a> {

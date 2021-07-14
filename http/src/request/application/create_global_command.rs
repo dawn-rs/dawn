@@ -96,7 +96,7 @@ impl<'a> CreateGlobalCommand<'a> {
         self
     }
 
-    fn request(&self) -> Result<Request, HttpError> {
+    fn request(&self) -> Result<Request<'a>, HttpError> {
         Request::builder(Route::CreateGlobalCommand {
             application_id: self.application_id.0,
         })

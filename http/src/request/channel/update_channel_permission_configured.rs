@@ -26,7 +26,7 @@ pub struct UpdateChannelPermissionConfigured<'a> {
     fields: UpdateChannelPermissionConfiguredFields,
     http: &'a Client,
     target_id: u64,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 impl<'a> UpdateChannelPermissionConfigured<'a> {
@@ -35,7 +35,7 @@ impl<'a> UpdateChannelPermissionConfigured<'a> {
         channel_id: ChannelId,
         allow: Permissions,
         deny: Permissions,
-        target: &PermissionOverwriteType,
+        target: PermissionOverwriteType,
     ) -> Self {
         let (name, target_id) = match target {
             PermissionOverwriteType::Member(user_id) => {
@@ -59,7 +59,7 @@ impl<'a> UpdateChannelPermissionConfigured<'a> {
         }
     }
 
-    fn request(&self) -> Result<Request, Error> {
+    fn request(&self) -> Result<Request<'a>, Error> {
         let mut request = Request::builder(Route::UpdatePermissionOverwrite {
             channel_id: self.channel_id.0,
             target_id: self.target_id,
@@ -84,10 +84,9 @@ impl<'a> UpdateChannelPermissionConfigured<'a> {
     }
 }
 
-impl<'a> AuditLogReason for UpdateChannelPermissionConfigured<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for UpdateChannelPermissionConfigured<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }
@@ -105,13 +104,13 @@ mod tests {
 
     #[test]
     fn test_request() {
-        let client = Client::new("foo");
+        let client = Client::new("foo".to_owned());
         let builder = UpdateChannelPermissionConfigured::new(
             &client,
             ChannelId(1),
             Permissions::empty(),
             Permissions::SEND_MESSAGES,
-            &PermissionOverwriteType::Member(UserId(2)),
+            PermissionOverwriteType::Member(UserId(2)),
         );
         let actual = builder.request().expect("failed to create request");
 
@@ -128,6 +127,6 @@ mod tests {
         let expected = Request::builder(route).body(body).build();
 
         assert_eq!(expected.body, actual.body);
-        assert_eq!(expected.path, actual.path);
+        assert_eq!(expected.route, actual.route);
     }
 }

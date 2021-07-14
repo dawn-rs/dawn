@@ -40,7 +40,7 @@ impl CreateBanError {
 impl Display for CreateBanError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match &self.kind {
-            CreateBanErrorType::DeleteMessageDaysInvalid { .. } => {
+            CreateBanErrorType::DeleteMessageDaysInvalid => {
                 f.write_str("the number of days' worth of messages to delete is invalid")
             }
         }
@@ -54,16 +54,13 @@ impl Error for CreateBanError {}
 #[non_exhaustive]
 pub enum CreateBanErrorType {
     /// The number of days' worth of messages to delete is greater than 7.
-    DeleteMessageDaysInvalid {
-        /// Provided number of days' worth of messages to delete.
-        days: u64,
-    },
+    DeleteMessageDaysInvalid,
 }
 
 #[derive(Default)]
-struct CreateBanFields {
+struct CreateBanFields<'a> {
     delete_message_days: Option<u64>,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 /// Bans a user from a guild, optionally with the number of days' worth of
@@ -80,7 +77,7 @@ struct CreateBanFields {
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 ///
 /// let guild_id = GuildId(100);
 /// let user_id = UserId(200);
@@ -92,7 +89,7 @@ struct CreateBanFields {
 /// # Ok(()) }
 /// ```
 pub struct CreateBan<'a> {
-    fields: CreateBanFields,
+    fields: CreateBanFields<'a>,
     guild_id: GuildId,
     http: &'a Client,
     user_id: UserId,
@@ -119,7 +116,7 @@ impl<'a> CreateBan<'a> {
     pub fn delete_message_days(mut self, days: u64) -> Result<Self, CreateBanError> {
         if !validate::ban_delete_message_days(days) {
             return Err(CreateBanError {
-                kind: CreateBanErrorType::DeleteMessageDaysInvalid { days },
+                kind: CreateBanErrorType::DeleteMessageDaysInvalid,
             });
         }
 
@@ -143,11 +140,11 @@ impl<'a> CreateBan<'a> {
     }
 }
 
-impl<'a> AuditLogReason for CreateBan<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
+impl<'a> AuditLogReason<'a> for CreateBan<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
         self.fields
             .reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+            .replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }

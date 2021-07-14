@@ -10,19 +10,11 @@ use twilight_model::id::GuildId;
 pub struct DeleteTemplate<'a> {
     guild_id: GuildId,
     http: &'a Client,
-    template_code: String,
+    template_code: &'a str,
 }
 
 impl<'a> DeleteTemplate<'a> {
-    pub(crate) fn new(
-        http: &'a Client,
-        guild_id: GuildId,
-        template_code: impl Into<String>,
-    ) -> Self {
-        Self::_new(http, guild_id, template_code.into())
-    }
-
-    const fn _new(http: &'a Client, guild_id: GuildId, template_code: String) -> Self {
+    pub(crate) const fn new(http: &'a Client, guild_id: GuildId, template_code: &'a str) -> Self {
         Self {
             guild_id,
             http,

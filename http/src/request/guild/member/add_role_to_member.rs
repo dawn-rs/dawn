@@ -18,7 +18,7 @@ use twilight_model::id::{GuildId, RoleId, UserId};
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = Client::new("my token");
+/// let client = Client::new("my token".to_owned());
 ///
 /// let guild_id = GuildId(1);
 /// let role_id = RoleId(2);
@@ -35,21 +35,21 @@ pub struct AddRoleToMember<'a> {
     http: &'a Client,
     role_id: RoleId,
     user_id: UserId,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 impl<'a> AddRoleToMember<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         http: &'a Client,
-        guild_id: impl Into<GuildId>,
-        user_id: impl Into<UserId>,
-        role_id: impl Into<RoleId>,
+        guild_id: GuildId,
+        user_id: UserId,
+        role_id: RoleId,
     ) -> Self {
         Self {
-            guild_id: guild_id.into(),
+            guild_id,
             http,
-            role_id: role_id.into(),
-            user_id: user_id.into(),
+            role_id,
+            user_id,
             reason: None,
         }
     }
@@ -77,10 +77,9 @@ impl<'a> AddRoleToMember<'a> {
     }
 }
 
-impl<'a> AuditLogReason for AddRoleToMember<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for AddRoleToMember<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }

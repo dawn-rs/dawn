@@ -8,27 +8,27 @@ use serde::Serialize;
 use twilight_model::{channel::Webhook, id::WebhookId};
 
 #[derive(Default, Serialize)]
-struct UpdateWebhookWithTokenFields {
+struct UpdateWebhookWithTokenFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
-    avatar: Option<NullableField<String>>,
+    avatar: Option<NullableField<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<NullableField<String>>,
+    name: Option<NullableField<&'a str>>,
 }
 
 /// Update a webhook, with a token, by ID.
 pub struct UpdateWebhookWithToken<'a> {
-    fields: UpdateWebhookWithTokenFields,
+    fields: UpdateWebhookWithTokenFields<'a>,
     http: &'a Client,
-    token: String,
+    token: &'a str,
     webhook_id: WebhookId,
 }
 
 impl<'a> UpdateWebhookWithToken<'a> {
-    pub(crate) fn new(http: &'a Client, webhook_id: WebhookId, token: impl Into<String>) -> Self {
+    pub(crate) fn new(http: &'a Client, webhook_id: WebhookId, token: &'a str) -> Self {
         Self {
             fields: UpdateWebhookWithTokenFields::default(),
             http,
-            token: token.into(),
+            token,
             webhook_id,
         }
     }
@@ -40,19 +40,17 @@ impl<'a> UpdateWebhookWithToken<'a> {
     /// base64-encoded image.
     ///
     /// [Discord Docs/Image Data]: https://discord.com/developers/docs/reference#image-data
-    pub fn avatar(mut self, avatar: impl Into<Option<String>>) -> Self {
+    pub fn avatar(mut self, avatar: Option<&'a str>) -> Self {
         self.fields
             .avatar
-            .replace(NullableField::from_option(avatar.into()));
+            .replace(NullableField::from_option(avatar));
 
         self
     }
 
     /// Change the name of the webhook.
-    pub fn name(mut self, name: impl Into<Option<String>>) -> Self {
-        self.fields
-            .name
-            .replace(NullableField::from_option(name.into()));
+    pub fn name(mut self, name: Option<&'a str>) -> Self {
+        self.fields.name.replace(NullableField::from_option(name));
 
         self
     }

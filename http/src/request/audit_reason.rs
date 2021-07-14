@@ -3,8 +3,8 @@ use std::{
     fmt::{Display, Formatter, Result as FmtResult},
 };
 
-pub trait AuditLogReason: private::Sealed {
-    fn reason(self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError>
+pub trait AuditLogReason<'a>: private::Sealed {
+    fn reason(self, reason: &'a str) -> Result<Self, AuditLogReasonError>
     where
         Self: Sized;
 }
@@ -70,12 +70,12 @@ impl AuditLogReasonError {
     /// The maximum audit log reason length in UTF-16 codepoints.
     pub const AUDIT_REASON_LENGTH: usize = 512;
 
-    pub(crate) fn validate(reason: String) -> Result<String, AuditLogReasonError> {
+    pub(crate) fn validate(reason: &str) -> Result<&str, AuditLogReasonError> {
         if reason.chars().count() <= Self::AUDIT_REASON_LENGTH {
             Ok(reason)
         } else {
             Err(AuditLogReasonError {
-                kind: AuditLogReasonErrorType::TooLarge { reason },
+                kind: AuditLogReasonErrorType::TooLarge,
             })
         }
     }
@@ -116,12 +116,11 @@ impl AuditLogReasonError {
 impl Display for AuditLogReasonError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match &self.kind {
-            AuditLogReasonErrorType::TooLarge { reason } => {
-                f.write_str("the audit log reason is ")?;
-                Display::fmt(&reason.chars().count(), f)?;
-                f.write_str(" characters long, but the max is ")?;
+            AuditLogReasonErrorType::TooLarge => {
+                f.write_str("audit log reason is longer than ")?;
+                Display::fmt(&Self::AUDIT_REASON_LENGTH, f)?;
 
-                Display::fmt(&Self::AUDIT_REASON_LENGTH, f)
+                f.write_str(" characters long")
             }
         }
     }
@@ -134,7 +133,7 @@ impl Error for AuditLogReasonError {}
 #[non_exhaustive]
 pub enum AuditLogReasonErrorType {
     /// Returned when the reason is over 512 UTF-16 characters.
-    TooLarge { reason: String },
+    TooLarge,
 }
 
 #[cfg(test)]
@@ -159,35 +158,35 @@ mod test {
     };
     use static_assertions::{assert_impl_all, assert_obj_safe};
 
-    assert_obj_safe!(AuditLogReason);
+    assert_obj_safe!(AuditLogReason<'_>);
 
-    assert_impl_all!(CreateInvite<'_>: AuditLogReason);
-    assert_impl_all!(DeleteInvite<'_>: AuditLogReason);
-    assert_impl_all!(DeleteMessage<'_>: AuditLogReason);
-    assert_impl_all!(DeleteMessages<'_>: AuditLogReason);
-    assert_impl_all!(UpdateChannel<'_>: AuditLogReason);
-    assert_impl_all!(CreateWebhook<'_>: AuditLogReason);
-    assert_impl_all!(DeleteWebhook<'_>: AuditLogReason);
-    assert_impl_all!(UpdateWebhook<'_>: AuditLogReason);
-    assert_impl_all!(CreatePin<'_>: AuditLogReason);
-    assert_impl_all!(DeleteChannel<'_>: AuditLogReason);
-    assert_impl_all!(DeleteChannelPermissionConfigured<'_>: AuditLogReason);
-    assert_impl_all!(DeletePin<'_>: AuditLogReason);
-    assert_impl_all!(UpdateChannelPermissionConfigured<'_>: AuditLogReason);
-    assert_impl_all!(CreateBan<'_>: AuditLogReason);
-    assert_impl_all!(DeleteBan<'_>: AuditLogReason);
-    assert_impl_all!(CreateGuildChannel<'_>: AuditLogReason);
-    assert_impl_all!(CreateGuildPrune<'_>: AuditLogReason);
-    assert_impl_all!(CreateEmoji<'_>: AuditLogReason);
-    assert_impl_all!(DeleteEmoji<'_>: AuditLogReason);
-    assert_impl_all!(UpdateEmoji<'_>: AuditLogReason);
-    assert_impl_all!(DeleteGuildIntegration<'_>: AuditLogReason);
-    assert_impl_all!(UpdateGuildMember<'_>: AuditLogReason);
-    assert_impl_all!(AddRoleToMember<'_>: AuditLogReason);
-    assert_impl_all!(RemoveMember<'_>: AuditLogReason);
-    assert_impl_all!(RemoveRoleFromMember<'_>: AuditLogReason);
-    assert_impl_all!(CreateRole<'_>: AuditLogReason);
-    assert_impl_all!(DeleteRole<'_>: AuditLogReason);
-    assert_impl_all!(UpdateRole<'_>: AuditLogReason);
-    assert_impl_all!(UpdateGuild<'_>: AuditLogReason);
+    assert_impl_all!(CreateInvite<'_>: AuditLogReason<'static>);
+    assert_impl_all!(DeleteInvite<'_>: AuditLogReason<'static>);
+    assert_impl_all!(DeleteMessage<'_>: AuditLogReason<'static>);
+    assert_impl_all!(DeleteMessages<'_>: AuditLogReason<'static>);
+    assert_impl_all!(UpdateChannel<'_>: AuditLogReason<'static>);
+    assert_impl_all!(CreateWebhook<'_>: AuditLogReason<'static>);
+    assert_impl_all!(DeleteWebhook<'_>: AuditLogReason<'static>);
+    assert_impl_all!(UpdateWebhook<'_>: AuditLogReason<'static>);
+    assert_impl_all!(CreatePin<'_>: AuditLogReason<'static>);
+    assert_impl_all!(DeleteChannel<'_>: AuditLogReason<'static>);
+    assert_impl_all!(DeleteChannelPermissionConfigured<'_>: AuditLogReason<'static>);
+    assert_impl_all!(DeletePin<'_>: AuditLogReason<'static>);
+    assert_impl_all!(UpdateChannelPermissionConfigured<'_>: AuditLogReason<'static>);
+    assert_impl_all!(CreateBan<'_>: AuditLogReason<'static>);
+    assert_impl_all!(DeleteBan<'_>: AuditLogReason<'static>);
+    assert_impl_all!(CreateGuildChannel<'_>: AuditLogReason<'static>);
+    assert_impl_all!(CreateGuildPrune<'_>: AuditLogReason<'static>);
+    assert_impl_all!(CreateEmoji<'_>: AuditLogReason<'static>);
+    assert_impl_all!(DeleteEmoji<'_>: AuditLogReason<'static>);
+    assert_impl_all!(UpdateEmoji<'_>: AuditLogReason<'static>);
+    assert_impl_all!(DeleteGuildIntegration<'_>: AuditLogReason<'static>);
+    assert_impl_all!(UpdateGuildMember<'_>: AuditLogReason<'static>);
+    assert_impl_all!(AddRoleToMember<'_>: AuditLogReason<'static>);
+    assert_impl_all!(RemoveMember<'_>: AuditLogReason<'static>);
+    assert_impl_all!(RemoveRoleFromMember<'_>: AuditLogReason<'static>);
+    assert_impl_all!(CreateRole<'_>: AuditLogReason<'static>);
+    assert_impl_all!(DeleteRole<'_>: AuditLogReason<'static>);
+    assert_impl_all!(UpdateRole<'_>: AuditLogReason<'static>);
+    assert_impl_all!(UpdateGuild<'_>: AuditLogReason<'static>);
 }

@@ -11,7 +11,7 @@ use twilight_model::{
 };
 
 #[derive(Default, Serialize)]
-struct UpdateRoleFields {
+struct UpdateRoleFields<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     color: Option<NullableField<u32>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -19,18 +19,18 @@ struct UpdateRoleFields {
     #[serde(skip_serializing_if = "Option::is_none")]
     mentionable: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<NullableField<String>>,
+    name: Option<NullableField<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     permissions: Option<Permissions>,
 }
 
 /// Update a role by guild id and its id.
 pub struct UpdateRole<'a> {
-    fields: UpdateRoleFields,
+    fields: UpdateRoleFields<'a>,
     guild_id: GuildId,
     http: &'a Client,
     role_id: RoleId,
-    reason: Option<String>,
+    reason: Option<&'a str>,
 }
 
 impl<'a> UpdateRole<'a> {
@@ -45,10 +45,8 @@ impl<'a> UpdateRole<'a> {
     }
 
     /// Set the color of the role.
-    pub fn color(mut self, color: impl Into<Option<u32>>) -> Self {
-        self.fields
-            .color
-            .replace(NullableField::from_option(color.into()));
+    pub fn color(mut self, color: Option<u32>) -> Self {
+        self.fields.color.replace(NullableField::from_option(color));
 
         self
     }
@@ -68,10 +66,8 @@ impl<'a> UpdateRole<'a> {
     }
 
     /// Set the name of the role.
-    pub fn name(mut self, name: impl Into<Option<String>>) -> Self {
-        self.fields
-            .name
-            .replace(NullableField::from_option(name.into()));
+    pub fn name(mut self, name: Option<&'a str>) -> Self {
+        self.fields.name.replace(NullableField::from_option(name));
 
         self
     }
@@ -110,10 +106,9 @@ impl<'a> UpdateRole<'a> {
     }
 }
 
-impl<'a> AuditLogReason for UpdateRole<'a> {
-    fn reason(mut self, reason: impl Into<String>) -> Result<Self, AuditLogReasonError> {
-        self.reason
-            .replace(AuditLogReasonError::validate(reason.into())?);
+impl<'a> AuditLogReason<'a> for UpdateRole<'a> {
+    fn reason(mut self, reason: &'a str) -> Result<Self, AuditLogReasonError> {
+        self.reason.replace(AuditLogReasonError::validate(reason)?);
 
         Ok(self)
     }
